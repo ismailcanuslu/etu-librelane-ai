@@ -1,11 +1,13 @@
 "use client";
 
-import { Message, Project, MOCK_PROJECTS, MOCK_HISTORIES } from "./mock-data";
+import type { Message, Project } from "./types";
 
 const SETTINGS_KEY = "librelane_settings";
 const ACTIVE_PROJECT_KEY = "librelane_active_project";
 const PROJECTS_KEY = "librelane_projects";
 const HISTORY_PREFIX = "librelane_history_";
+
+export type { Message, Project };
 
 export interface Settings {
   apiKey: string;
@@ -39,7 +41,7 @@ export function saveSettings(settings: Settings): void {
 
 // Active project
 export function getActiveProjectId(): string {
-  return safe(() => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? MOCK_PROJECTS[0].id, MOCK_PROJECTS[0].id);
+  return safe(() => localStorage.getItem(ACTIVE_PROJECT_KEY) ?? "", "");
 }
 
 export function saveActiveProjectId(id: string): void {
@@ -50,8 +52,8 @@ export function saveActiveProjectId(id: string): void {
 export function getProjects(): Project[] {
   return safe(() => {
     const raw = localStorage.getItem(PROJECTS_KEY);
-    return raw ? JSON.parse(raw) : MOCK_PROJECTS;
-  }, MOCK_PROJECTS);
+    return raw ? JSON.parse(raw) : [];
+  }, []);
 }
 
 export function saveProjects(projects: Project[]): void {
@@ -62,9 +64,8 @@ export function saveProjects(projects: Project[]): void {
 export function getChatHistory(projectId: string): Message[] {
   return safe(() => {
     const raw = localStorage.getItem(HISTORY_PREFIX + projectId);
-    if (raw) return JSON.parse(raw);
-    return MOCK_HISTORIES[projectId] ?? [];
-  }, MOCK_HISTORIES[projectId] ?? []);
+    return raw ? JSON.parse(raw) : [];
+  }, []);
 }
 
 export function saveChatHistory(projectId: string, messages: Message[]): void {
