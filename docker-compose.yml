@@ -1,0 +1,19 @@
+# Next.js — ana makinedeki nginx buraya yönlendirir: http://127.0.0.1:3000
+# Çalıştırma: docker compose up -d --build
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: librelane-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    env_file:
+      - .env
+    environment:
+      # .env içindeki localhost burada çalışmaz; gateway/file servisi ana makinedeyse:
+      MINIO_BACKEND: ${MINIO_BACKEND_DOCKER:-http://host.docker.internal:8000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
