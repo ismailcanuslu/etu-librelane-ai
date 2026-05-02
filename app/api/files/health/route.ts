@@ -1,6 +1,9 @@
 import { FILE_SERVICE_BASE } from "@/lib/file-service";
 
-/** Proxies Go service `GET /health` (MinIO erişilebilirliği sunucu tarafında doğrulanır). */
+/**
+ * Upstream `GET /health`. `MINIO_BACKEND` gateway ise bu çağrı gateway’in `/health`’ine gider
+ * (file microservice değil); doğrudan Go servisine bakmak için backend URL’yi ona çevir.
+ */
 export async function GET() {
   try {
     const res = await fetch(`${FILE_SERVICE_BASE}/health`, { cache: "no-store" });

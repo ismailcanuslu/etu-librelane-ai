@@ -34,7 +34,7 @@ import { MOCK_LOG_OUTPUT } from "@/lib/mock-fs";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
-type Tab = "build" | "tools" | "analysis";
+export type AgentWorkflowTab = "build" | "tools" | "analysis";
 
 interface BuildOption {
   id: string;
@@ -484,13 +484,48 @@ function LogEntryCard({
 
 /* ─────────────────────────── Main Panel ─────────────────────────── */
 
+export function AgentWorkflowBody({
+  activeTab,
+  projectId,
+  projectName,
+  onAskAI,
+}: {
+  activeTab: AgentWorkflowTab;
+  projectId: string;
+  projectName: string;
+  onAskAI: (msg: string) => void;
+}) {
+  const [running, setRunning] = useState<string | null>(null);
+
+  function handleRun(id: string) {
+    setRunning(id);
+    setTimeout(() => setRunning(null), 3000);
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {activeTab === "build" && (
+        <BuildTab projectName={projectName} running={running} onRun={handleRun} />
+      )}
+      {activeTab === "tools" && <ToolsTab projectName={projectName} />}
+      {activeTab === "analysis" && (
+        <AnalysisTab
+          projectId={projectId}
+          projectName={projectName}
+          onAskAI={onAskAI}
+        />
+      )}
+    </div>
+  );
+}
+
 interface RightPanelProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
   projectName: string;
   onAskAI: (msg: string) => void;
-  defaultTab?: Tab;
+  defaultTab?: AgentWorkflowTab;
 }
 
 export default function RightPanel({
@@ -501,17 +536,11 @@ export default function RightPanel({
   onAskAI,
   defaultTab = "build",
 }: RightPanelProps) {
-  const [tab, setTab] = useState<Tab>(defaultTab);
-  const [running, setRunning] = useState<string | null>(null);
-
-  function handleRun(id: string) {
-    setRunning(id);
-    setTimeout(() => setRunning(null), 3000);
-  }
+  const [tab, setTab] = useState<AgentWorkflowTab>(defaultTab);
 
   if (!open) return null;
 
-  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const TABS: { id: AgentWorkflowTab; label: string; icon: React.ReactNode }[] = [
     { id: "build", label: "Derleme", icon: <Zap className="h-3.5 w-3.5" /> },
     { id: "tools", label: "Araç Takımı", icon: <Wrench className="h-3.5 w-3.5" /> },
     { id: "analysis", label: "Analiz", icon: <ScanSearch className="h-3.5 w-3.5" /> },
@@ -550,17 +579,15 @@ export default function RightPanel({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {tab === "build" && <BuildTab projectName={projectName} running={running} onRun={handleRun} />}
-        {tab === "tools" && <ToolsTab projectName={projectName} />}
-        {tab === "analysis" && (
-          <AnalysisTab
-            projectId={projectId}
-            projectName={projectName}
-            onAskAI={(msg) => { onAskAI(msg); onClose(); }}
-          />
-        )}
-      </div>
+      <AgentWorkflowBody
+        activeTab={tab}
+        projectId={projectId}
+        projectName={projectName}
+        onAskAI={(msg) => {
+          onAskAI(msg);
+          onClose();
+        }}
+      />
     </div>
   );
 }

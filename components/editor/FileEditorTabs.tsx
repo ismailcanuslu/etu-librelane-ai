@@ -12,6 +12,8 @@ interface FileEditorTabsProps {
   onTabChange: (key: string) => void;
   onTabClose: (key: string) => void;
   onTabUpdate: (key: string, patch: Partial<FileTab>) => void;
+  /** Üst sekmeler başka yerde (ör. ana çalışma alanı) gösteriliyorsa false */
+  showTabBar?: boolean;
 }
 
 const LINE_NUMBERS_WIDTH = 48;
@@ -158,6 +160,7 @@ export default function FileEditorTabs({
   onTabChange,
   onTabClose,
   onTabUpdate,
+  showTabBar = true,
 }: FileEditorTabsProps) {
   const activeTab = tabs.find((t) => t.key === activeKey);
 
@@ -219,38 +222,47 @@ export default function FileEditorTabs({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* Tab bar */}
-      <div className="flex items-end border-b border-white/8 bg-[#0a0f16] overflow-x-auto flex-shrink-0">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => onTabChange(tab.key)}
-            className={cn(
-              "group flex items-center gap-1.5 border-r border-white/8 px-3 py-2 text-xs transition-colors flex-shrink-0 max-w-[180px]",
-              tab.key === activeKey
-                ? "bg-[#0d1117] text-slate-200 border-t border-t-violet-500"
-                : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
-            )}
-          >
-            <span className="truncate">{tab.name}</span>
-            {tab.dirty && <span className="text-amber-400 flex-shrink-0">•</span>}
-            <span
-              role="button"
-              tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); onTabClose(tab.key); }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); onTabClose(tab.key); } }}
+      {showTabBar && (
+        <div className="flex flex-shrink-0 items-end overflow-x-auto border-b border-white/8 bg-[#0a0f16]">
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => onTabChange(tab.key)}
               className={cn(
-                "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded transition-colors",
-                "text-slate-600 hover:text-slate-300",
-                tab.key !== activeKey && "opacity-0 group-hover:opacity-100"
+                "group flex max-w-[180px] flex-shrink-0 items-center gap-1.5 border-r border-white/8 px-3 py-2 text-xs transition-colors",
+                tab.key === activeKey
+                  ? "border-t border-t-violet-500 bg-[#0d1117] text-slate-200"
+                  : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
               )}
-              title="Kapat"
             >
-              <X className="h-2.5 w-2.5" />
-            </span>
-          </button>
-        ))}
-      </div>
+              <span className="truncate">{tab.name}</span>
+              {tab.dirty && <span className="flex-shrink-0 text-amber-400">•</span>}
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTabClose(tab.key);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation();
+                    onTabClose(tab.key);
+                  }
+                }}
+                className={cn(
+                  "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded transition-colors",
+                  "text-slate-600 hover:text-slate-300",
+                  tab.key !== activeKey && "opacity-0 group-hover:opacity-100"
+                )}
+                title="Kapat"
+              >
+                <X className="h-2.5 w-2.5" />
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Active pane */}
       {activeTab ? (

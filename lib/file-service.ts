@@ -1,9 +1,9 @@
 /**
- * Go file microservice base URL (MinIO proxy).
- * `MINIO_BACKEND` (.env / .env.local), e.g. http://localhost:8080
+ * Go file microservice tabanı (veya gateway: aynı path’ler /buckets/... ile gider).
+ * `MINIO_BACKEND` — `.env` / `.env.local` (örn. doğrudan servis :8080 veya gateway :8000).
  */
 export const FILE_SERVICE_BASE =
-  process.env.MINIO_BACKEND?.replace(/\/$/, "") ?? "http://localhost:8080";
+  process.env.MINIO_BACKEND?.replace(/\/$/, "") ?? "http://localhost:8000";
 
 /** Encode each path segment for upstream paths (keys may contain spaces, unicode, etc.) */
 export function encodeObjectKeyPath(key: string): string {

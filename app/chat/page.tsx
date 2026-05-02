@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { MessageSquare } from "lucide-react";
+import { PanelRightOpen, FileCode2 } from "lucide-react";
 import Sidebar from "@/components/sidebar/Sidebar";
-import ChatArea from "@/components/chat/ChatArea";
 import FileEditorTabs from "@/components/editor/FileEditorTabs";
+import AgentPanel from "@/components/workspace/AgentPanel";
+import WorkspaceTerminal from "@/components/workspace/WorkspaceTerminal";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import {
@@ -15,54 +16,56 @@ import {
 import type { Project, FileTab, FileNode } from "@/lib/types";
 import { isTextFile } from "@/lib/types";
 
-// ─── Tab bar (Chat + file tabs) ───────────────────────────────────────────────
+// ─── Dosya sekmeleri (VS Code üst şeridi) ─────────────────────────────────────
 
-interface MainTabBarProps {
+interface EditorTabBarProps {
   fileTabs: FileTab[];
-  activePane: "chat" | string; // "chat" or file key
-  onPaneChange: (key: "chat" | string) => void;
+  activeFileKey: string | null;
+  onSelectFile: (key: string) => void;
   onFileTabClose: (key: string) => void;
 }
 
-function MainTabBar({ fileTabs, activePane, onPaneChange, onFileTabClose }: MainTabBarProps) {
-  return (
-    <div className="flex items-end border-b border-white/8 bg-[#0a0f16] overflow-x-auto flex-shrink-0">
-      {/* Chat tab */}
-      <button
-        onClick={() => onPaneChange("chat")}
-        className={cn(
-          "flex items-center gap-1.5 border-r border-white/8 px-4 py-2 text-xs transition-colors flex-shrink-0",
-          activePane === "chat"
-            ? "bg-[#0d1117] text-slate-200 border-t border-t-violet-500"
-            : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
-        )}
-      >
-        <MessageSquare className="h-3 w-3" />
-        <span>Chat</span>
-      </button>
+function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }: EditorTabBarProps) {
+  if (fileTabs.length === 0) {
+    return (
+      <div className="flex h-9 flex-shrink-0 items-center border-b border-white/8 bg-[#1e1e1e] px-3 text-[11px] text-slate-600">
+        <span className="text-slate-500">Dosya açmak için sol gezginde bir öğe seçin</span>
+      </div>
+    );
+  }
 
-      {/* File tabs */}
+  return (
+    <div className="flex flex-shrink-0 items-end overflow-x-auto border-b border-white/8 bg-[#252526]">
       {fileTabs.map((tab) => (
         <button
           key={tab.key}
-          onClick={() => onPaneChange(tab.key)}
+          type="button"
+          onClick={() => onSelectFile(tab.key)}
           className={cn(
-            "group flex items-center gap-1.5 border-r border-white/8 px-3 py-2 text-xs transition-colors flex-shrink-0 max-w-[200px]",
-            activePane === tab.key
-              ? "bg-[#0d1117] text-slate-200 border-t border-t-violet-500"
-              : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
+            "group flex max-w-[200px] flex-shrink-0 items-center gap-1.5 border-r border-white/[0.06] px-3 py-2 text-xs transition-colors",
+            activeFileKey === tab.key
+              ? "bg-[#1e1e1e] text-slate-100"
+              : "bg-[#2d2d2d] text-slate-400 hover:bg-[#323232] hover:text-slate-200"
           )}
         >
           <span className="truncate">{tab.name}</span>
-          {tab.dirty && <span className="text-amber-400 flex-shrink-0 text-[10px]">•</span>}
+          {tab.dirty && <span className="flex-shrink-0 text-[10px] text-amber-400">•</span>}
           <span
             role="button"
             tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onFileTabClose(tab.key); }}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); onFileTabClose(tab.key); } }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onFileTabClose(tab.key);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.stopPropagation();
+                onFileTabClose(tab.key);
+              }
+            }}
             className={cn(
-              "flex h-3.5 w-3.5 flex-shrink-0 items-center justify-center rounded text-slate-600 hover:text-slate-300 transition-colors",
-              activePane !== tab.key && "opacity-0 group-hover:opacity-100"
+              "flex h-4 w-4 flex-shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/10 hover:text-slate-200",
+              activeFileKey !== tab.key && "opacity-0 group-hover:opacity-100"
             )}
             title="Kapat"
           >
@@ -74,18 +77,30 @@ function MainTabBar({ fileTabs, activePane, onPaneChange, onFileTabClose }: Main
   );
 }
 
+function EmptyEditor() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-[#1e1e1e] px-6 text-center">
+      <FileCode2 className="h-12 w-12 text-slate-600" />
+      <div>
+        <p className="text-sm font-medium text-slate-400">Düzenleyici</p>
+        <p className="mt-1 max-w-sm text-xs text-slate-600">
+          Proje ağacından bir metin dosyası açın. Sekmeler üstte, terminal altta — sohbet ve araçlar sağ panelde.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── ChatPage ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
   const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
-
-  // Pane state: "chat" | file key
-  const [activePane, setActivePane] = useState<"chat" | string>("chat");
-  // Opened file tabs
+  const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
+  const [agentOpen, setAgentOpen] = useState(true);
+  const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
-  // Seed from localStorage on first render — Sidebar will sync from MinIO
   useEffect(() => {
     const stored = getProjects();
     const id = getActiveProjectId();
@@ -102,93 +117,120 @@ export default function ChatPage() {
     saveActiveProjectId(id);
     setProjects(getProjects());
     setFileTabs([]);
-    setActivePane("chat");
+    setActiveFileKey(null);
   }, []);
 
-  // Open a file in a tab
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
     if (!isTextFile(node.ext)) return;
 
-    const existing = fileTabs.find((t) => t.key === node.key && t.bucket === bucket);
-    if (existing) {
-      setActivePane(node.key);
-      return;
-    }
-
-    const newTab: FileTab = {
-      key: node.key,
-      bucket,
-      name: node.name,
-      content: "",
-      dirty: false,
-    };
-    setFileTabs((prev) => [...prev, newTab]);
-    setActivePane(node.key);
-  }, [fileTabs]);
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.key === node.key && t.bucket === bucket)) return prev;
+      const newTab: FileTab = {
+        key: node.key,
+        bucket,
+        name: node.name,
+        content: "",
+        dirty: false,
+      };
+      return [...prev, newTab];
+    });
+    setActiveFileKey(node.key);
+  }, []);
 
   const handleTabClose = useCallback((key: string) => {
     setFileTabs((prev) => {
       const idx = prev.findIndex((t) => t.key === key);
       const next = prev.filter((t) => t.key !== key);
-      // Switch pane: if this was active, go to adjacent tab or chat
-      if (activePane === key) {
+      setActiveFileKey((ak) => {
+        if (ak !== key) return ak;
         const adjacent = next[idx] ?? next[idx - 1];
-        setActivePane(adjacent?.key ?? "chat");
-      }
+        return adjacent?.key ?? null;
+      });
       return next;
     });
-  }, [activePane]);
+  }, []);
 
   const handleTabUpdate = useCallback((key: string, patch: Partial<FileTab>) => {
-    setFileTabs((prev) =>
-      prev.map((t) => (t.key === key ? { ...t, ...patch } : t))
-    );
+    setFileTabs((prev) => prev.map((t) => (t.key === key ? { ...t, ...patch } : t)));
   }, []);
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
 
   return (
     <TooltipProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-[#0d1117]">
+      <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
         <Sidebar
           activeProjectId={activeProjectId}
           onProjectChange={handleProjectChange}
           onOpenFile={handleOpenFile}
         />
 
-        <main className="flex flex-1 flex-col overflow-hidden min-w-0">
-          {/* Unified tab bar */}
-          <MainTabBar
+        {/* Orta: düzenleyici + terminal */}
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {!agentOpen && (
+            <button
+              type="button"
+              onClick={() => setAgentOpen(true)}
+              className="absolute right-0 top-1/2 z-20 flex h-20 w-5 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-white/10 bg-[#252526] text-slate-500 shadow-lg transition-colors hover:bg-[#323232] hover:text-violet-400"
+              title="AI panelini aç"
+            >
+              <PanelRightOpen className="h-4 w-4" />
+            </button>
+          )}
+
+          <EditorTabBar
             fileTabs={fileTabs}
-            activePane={activePane}
-            onPaneChange={(key) => setActivePane(key)}
+            activeFileKey={activeFileKey}
+            onSelectFile={setActiveFileKey}
             onFileTabClose={handleTabClose}
           />
 
-          {/* Content pane */}
-          <div className="flex flex-1 overflow-hidden">
-            {/* Chat — hidden (not unmounted) when a file tab is active */}
-            <div className={cn("flex flex-1 flex-col overflow-hidden", activePane !== "chat" && "hidden")}>
-          <ChatArea
-            key={activeProjectId}
-            projectId={activeProjectId}
-            projectName={activeProject?.name ?? ""}
-          />
-
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {fileTabs.length > 0 && activeFileKey ? (
+                <FileEditorTabs
+                  tabs={fileTabs}
+                  activeKey={activeFileKey}
+                  onTabChange={setActiveFileKey}
+                  onTabClose={handleTabClose}
+                  onTabUpdate={handleTabUpdate}
+                  showTabBar={false}
+                />
+              ) : (
+                <EmptyEditor />
+              )}
             </div>
 
-            {/* File editor — only rendered when there are open tabs */}
-            {fileTabs.length > 0 && activePane !== "chat" && (
-              <FileEditorTabs
-                tabs={fileTabs}
-                activeKey={activePane}
-                onTabChange={(key) => setActivePane(key)}
-                onTabClose={handleTabClose}
-                onTabUpdate={handleTabUpdate}
+            <div
+              className={cn(
+                "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10 transition-[height,max-height] duration-200",
+                terminalCollapsed ? "h-auto" : "h-[min(32vh,240px)] max-h-[320px]"
+              )}
+            >
+              <WorkspaceTerminal
+                collapsed={terminalCollapsed}
+                onToggleCollapsed={() => setTerminalCollapsed((c) => !c)}
               />
-            )}
+            </div>
           </div>
-        </main>
+        </div>
+
+        {/* Sağ: AI / araçlar */}
+        <div
+          className={cn(
+            "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10 transition-[width,min-width] duration-200 ease-out",
+            agentOpen ? "w-[min(420px,100vw)] min-w-[280px]" : "w-0 min-w-0 border-l-0"
+          )}
+        >
+          {agentOpen && (
+            <AgentPanel
+              key={activeProjectId}
+              projectId={activeProjectId}
+              projectName={activeProject?.name ?? ""}
+              onClose={() => setAgentOpen(false)}
+            />
+          )}
+        </div>
       </div>
     </TooltipProvider>
   );
