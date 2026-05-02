@@ -1,50 +1,39 @@
+FROM node:20-alpine AS base
+
 # 1. Aşama: Bağımlılıkları yükle
-FROM node:20-alpine AS deps
-RUN apk add --no-alt-client libc6-compat
+FROM base AS deps
+# Hata buradaydı: --no-alt-client yerine --no-cache kullanıyoruz
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
-RUN \
-  if [ -f row-lock.json ]; then npm ci; \
-  elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+RUN npm ci
 
-# 2. Aşama: Projeyi build et
-FROM node:20-alpine AS builder
+# 2. Aşama: Build aşaması
+FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npm run build
 
-# Next.js telemetrisini kapatmak istersen:
-ENV NEXT_TELEMETRY_DISABLED 1
-
-RUN \
-  if [ -f yarn.lock ]; then yarn build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm build; \
-  else npm run build; \
-  fi
-
-# 3. Aşama: Çalıştırma ortamı (Runner)
-FROM node:20-alpine AS runner
+# 3. Aşama: Çalışma aşaması (Runner)
+FROM base AS runner
 WORKDIR /app
 
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-
+# Warning çözümü: ENV anahtar=değer formatına geçildi
+ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
-
-# Standalone build çıktısını kopyala (next.config.js'de output: 'standalone' olmalı)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
+# Warning çözümü: Eşittir işareti eklendi
 EXPOSE 3000
-ENV PORT 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
