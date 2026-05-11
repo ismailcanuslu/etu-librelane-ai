@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Message } from "@/lib/mock-data";
+import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Cpu, User } from "lucide-react";
 

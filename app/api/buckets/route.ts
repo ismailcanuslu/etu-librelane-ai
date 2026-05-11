@@ -1,8 +1,9 @@
-// GET  /api/buckets       → list all buckets
-// POST /api/buckets       → create bucket (body: { name: string })
+// GET  /api/buckets       → list workspace projects
+// POST /api/buckets       → create project (body: { name: string })
 
 import type { NextRequest } from "next/server";
-import { FILE_SERVICE_BASE } from "@/lib/file-service";
+import { upstreamProjectPath, upstreamProjectsPath } from "@/lib/file-service";
+import { describeUpstreamFetchFailure } from "@/lib/upstream-fetch-error";
 
 async function safeJson(res: Response): Promise<unknown> {
   const text = await res.text();
@@ -14,25 +15,46 @@ async function safeJson(res: Response): Promise<unknown> {
 }
 
 export async function GET() {
+  const upstream = upstreamProjectsPath();
   try {
-    const res = await fetch(`${FILE_SERVICE_BASE}/buckets`, { cache: "no-store" });
-    const data = await safeJson(res);
-    return Response.json(data, { status: res.status });
+    const res = await fetch(upstream, { cache: "no-store" });
+    const data = (await safeJson(res)) as {
+      buckets?: Array<{ name: string; createdAt: string }>;
+      projects?: Array<{ name: string; createdAt: string }>;
+      count?: number;
+    };
+    const items = data.projects ?? data.buckets ?? [];
+    return Response.json(
+      {
+        count: data.count ?? items.length,
+        buckets: items,
+        projects: items,
+      },
+      { status: res.status }
+    );
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 502 });
+    const d = describeUpstreamFetchFailure(err, upstream);
+    return Response.json(
+      {
+        error: d.message,
+        causes: d.causes,
+        code: d.code,
+        upstream,
+        hint: d.hint,
+      },
+      { status: 502 }
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
-  // Accept both application/json and plain text bodies
   let name: string | undefined;
   try {
     const ct = request.headers.get("content-type") ?? "";
     if (ct.includes("application/json")) {
-      const body = await request.json() as { name?: string };
+      const body = (await request.json()) as { name?: string };
       name = body.name?.trim();
     } else {
-      // Fallback: read raw text, try JSON parse, else treat as plain bucket name
       const text = (await request.text()).trim();
       try {
         const parsed = JSON.parse(text) as { name?: string };
@@ -49,13 +71,22 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "name is required" }, { status: 400 });
   }
 
+  const upstream = upstreamProjectPath(name);
   try {
-    const res = await fetch(`${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(name)}`, {
-      method: "POST",
-    });
+    const res = await fetch(upstream, { method: "POST" });
     const data = await safeJson(res);
     return Response.json(data, { status: res.status });
   } catch (err) {
-    return Response.json({ error: String(err) }, { status: 502 });
+    const d = describeUpstreamFetchFailure(err, upstream);
+    return Response.json(
+      {
+        error: d.message,
+        causes: d.causes,
+        code: d.code,
+        upstream,
+        hint: d.hint,
+      },
+      { status: 502 }
+    );
   }
 }

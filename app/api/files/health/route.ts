@@ -1,12 +1,11 @@
-import { FILE_SERVICE_BASE } from "@/lib/file-service";
+import { getFileServiceBase } from "@/lib/file-service";
 
 /**
- * Upstream `GET /health`. `MINIO_BACKEND` gateway ise bu çağrı gateway’in `/health`’ine gider
- * (file microservice değil); doğrudan Go servisine bakmak için backend URL’yi ona çevir.
+ * Upstream `GET /health`. Gateway tabanı verilmişse gateway health'ine gider.
  */
 export async function GET() {
   try {
-    const res = await fetch(`${FILE_SERVICE_BASE}/health`, { cache: "no-store" });
+    const res = await fetch(`${getFileServiceBase()}/health`, { cache: "no-store" });
     const text = await res.text();
     let data: unknown = { status: "unknown" };
     try {
@@ -17,7 +16,7 @@ export async function GET() {
     return Response.json(data as object, { status: res.status });
   } catch (err) {
     return Response.json(
-      { error: String(err), hint: "MINIO_BACKEND ve Go servisinin ayakta olduğundan emin olun" },
+      { error: String(err), hint: "WORKSPACE_BACKEND ve gateway/backend servisinin ayakta olduğundan emin olun" },
       { status: 502 }
     );
   }

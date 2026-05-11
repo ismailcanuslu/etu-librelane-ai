@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   X,
   Zap,
@@ -11,14 +11,10 @@ import {
   Package,
   Info,
   ArrowRight,
-  CircleDot,
   Wrench,
   FlaskConical,
   ScanSearch,
   Cpu,
-  ChevronDown,
-  Terminal,
-  Network,
   Gauge,
   Microscope,
   FileSearch,
@@ -28,158 +24,439 @@ import {
   MessageCircle,
   Eye,
   Code,
+  Loader2,
+  Clock,
+  Bug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MOCK_LOG_OUTPUT } from "@/lib/mock-fs";
+import { useActiveJob } from "@/lib/active-job-context";
+import { analyzeLog } from "@/lib/ai-client";
+import { FileAPI } from "@/lib/api";
+import { listJobs, getJobLog, listTools } from "@/lib/job-client";
+import type { Job, JobStatus, ObjectInfo, ToolSpec } from "@/lib/types";
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
 export type AgentWorkflowTab = "build" | "tools" | "analysis";
 
-interface BuildOption {
+interface ActionCardSpec {
   id: string;
   icon: React.ReactNode;
   label: string;
   description: string;
   infoText: string;
   color: string;
-}
-
-const BUILD_OPTIONS: BuildOption[] = [
-  {
-    id: "synthesis",
-    icon: <Layers className="h-4 w-4" />,
-    label: "Sentez",
-    description: "RTL → Netlist",
-    infoText: "OpenLane sentez adımını çalıştırır. Verilog kaynak dosyalarınızı mantık kapılarına dönüştürür. Yosys sentez aracını kullanır.",
-    color: "text-violet-400 bg-violet-500/10 border-violet-500/20",
-  },
-  {
-    id: "verification",
-    icon: <CheckCircle2 className="h-4 w-4" />,
-    label: "Doğrulama",
-    description: "RTL Lint & Formal",
-    infoText: "Icarus Verilog (iverilog) ile RTL doğrulaması yapar. Test bench dosyalarınızın mevcut olması gerekir.",
-    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  },
-  {
-    id: "simulation",
-    icon: <Play className="h-4 w-4" />,
-    label: "Simülasyon",
-    description: "GTKWave ile görselleştir",
-    infoText: "GTKWave kullanarak dalga formu simülasyonu başlatır. Cihazınızda GTKWave yüklü olmalıdır.",
-    color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
-  },
-  {
-    id: "pnr",
-    icon: <GitBranch className="h-4 w-4" />,
-    label: "Fiziksel Tasarım",
-    description: "Place & Route",
-    infoText: "OpenLane PnR akışını çalıştırır. Yerleştirme ve yönlendirme adımlarını gerçekleştirir.",
-    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  },
-  {
-    id: "gdsii",
-    icon: <Package className="h-4 w-4" />,
-    label: "GDSII Dışa Aktarma",
-    description: "Final tapeout",
-    infoText: "Nihai GDSII dosyasını oluşturur. Akış tamamlanmadan çalıştırılmamalıdır.",
-    color: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-  },
-];
-
-interface ToolItem {
-  id: string;
-  icon: React.ReactNode;
-  label: string;
-  description: string;
   badge?: string;
-  color: string;
 }
 
-const TOOL_GROUPS: { label: string; items: ToolItem[] }[] = [
-  {
-    label: "Test & Doğrulama",
-    items: [
-      {
-        id: "smoke-test",
-        icon: <Flame className="h-4 w-4" />,
-        label: "Smoke Test",
-        description: "Temel derleme ve elaborasyon kontrolü yapar. Hızlı bir sağlık kontrolüdür.",
-        badge: "Hızlı",
-        color: "text-orange-400",
-      },
-      {
-        id: "lint",
-        icon: <ScanSearch className="h-4 w-4" />,
-        label: "RTL Lint",
-        description: "Verilog/SystemVerilog kaynak kodunu lint kurallarına göre analiz eder.",
-        color: "text-sky-400",
-      },
-      {
-        id: "formal",
-        icon: <FlaskConical className="h-4 w-4" />,
-        label: "Formal Doğrulama",
-        description: "SymbiYosys ile formal doğrulama çalıştırır. Assertion tabanlı kontrol.",
-        color: "text-violet-400",
-      },
-    ],
+const BUILD_FLOW_ORDER = ["synthesis", "verification", "simulation", "pnr", "gdsii"] as const;
+
+const TOOL_GROUP_LABELS: Record<string, string> = {
+  tools: "Test & Doğrulama",
+  analysis: "Analiz & Raporlama",
+};
+
+const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText">> = {
+  "smoke-test": {
+    icon: <Flame className="h-4 w-4" />,
+    color: "text-orange-400",
+    infoText: "iverilog ile *.v dosyalarının elaborate olup olmadığını dener.",
   },
-  {
-    label: "Analiz & Raporlama",
-    items: [
-      {
-        id: "timing",
-        icon: <Gauge className="h-4 w-4" />,
-        label: "Timing Analizi",
-        description: "OpenSTA ile statik timing analizi. Setup ve hold zamanlarını kontrol eder.",
-        color: "text-amber-400",
-      },
-      {
-        id: "power",
-        icon: <Cpu className="h-4 w-4" />,
-        label: "Güç Analizi",
-        description: "Tasarımın statik ve dinamik güç tüketimini analiz eder.",
-        color: "text-emerald-400",
-      },
-      {
-        id: "netlist-view",
-        icon: <Network className="h-4 w-4" />,
-        label: "Netlist Görüntüleyici",
-        description: "Sentez sonrası netlist'i interaktif şema olarak görselleştirir.",
-        color: "text-rose-400",
-      },
-    ],
+  lint: {
+    icon: <ScanSearch className="h-4 w-4" />,
+    color: "text-sky-400",
+    infoText: "Verilator ile statik analiz; uyarı/hata listesi üretir.",
   },
-  {
-    label: "Yardımcı Araçlar",
-    items: [
-      {
-        id: "drc",
-        icon: <Microscope className="h-4 w-4" />,
-        label: "DRC Kontrolü",
-        description: "Design Rule Check. Fiziksel tasarım kurallarını doğrular.",
-        color: "text-purple-400",
-      },
-      {
-        id: "lvs",
-        icon: <FileSearch className="h-4 w-4" />,
-        label: "LVS Kontrolü",
-        description: "Layout vs Schematic. Çıkarılan netlist ile şemayı karşılaştırır.",
-        color: "text-teal-400",
-      },
-      {
-        id: "terminal",
-        icon: <Terminal className="h-4 w-4" />,
-        label: "Nix Shell",
-        description: "LibreLane ortamında interaktif terminal oturumu başlatır.",
-        color: "text-slate-400",
-      },
-    ],
+  formal: {
+    icon: <FlaskConical className="h-4 w-4" />,
+    color: "text-violet-400",
+    infoText: "SymbiYosys gerektirir; runner image'ında henüz yok.",
   },
+  simulation: {
+    icon: <Play className="h-4 w-4" />,
+    color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
+    infoText: "tb_*.v dosyalarını derler ve vvp ile koşturur.",
+  },
+  synthesis: {
+    icon: <Layers className="h-4 w-4" />,
+    color: "text-violet-400 bg-violet-500/10 border-violet-500/20",
+    infoText: "Yosys synth pass'i ile *.v dosyalarını netlist'e çevirir. Çıktı: netlist.v.",
+  },
+  verification: {
+    icon: <CheckCircle2 className="h-4 w-4" />,
+    color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+    infoText: "Verilator --lint + iverilog elaborate kombinasyonu.",
+  },
+  pnr: {
+    icon: <GitBranch className="h-4 w-4" />,
+    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    infoText: "OpenLane PnR akışı; config.json ve OpenLane runner image gerekir.",
+  },
+  gdsii: {
+    icon: <Package className="h-4 w-4" />,
+    color: "text-rose-400 bg-rose-500/10 border-rose-500/20",
+    infoText: "OpenLane GDSII adımı; tam akış tamamlanmadan kullanılmamalı.",
+  },
+  timing: {
+    icon: <Gauge className="h-4 w-4" />,
+    color: "text-amber-400",
+    infoText: "OpenLane STA adımı; OpenLane runner image gerekir.",
+  },
+  power: {
+    icon: <Cpu className="h-4 w-4" />,
+    color: "text-emerald-400",
+    infoText: "OpenLane güç raporu adımı.",
+  },
+  drc: {
+    icon: <Microscope className="h-4 w-4" />,
+    color: "text-purple-400",
+    infoText: "OpenLane DRC adımı.",
+  },
+  lvs: {
+    icon: <FileSearch className="h-4 w-4" />,
+    color: "text-teal-400",
+    infoText: "OpenLane LVS adımı.",
+  },
+};
+
+const FALLBACK_TOOLS: ToolSpec[] = [
+  { id: "smoke-test", label: "Smoke Test", description: "Hızlı elaborate kontrolü.", image: "", group: "tools", badge: "Hızlı", enabled: true },
+  { id: "lint", label: "RTL Lint", description: "Verilator lint.", image: "", group: "tools", badge: null, enabled: true },
+  { id: "simulation", label: "Simülasyon", description: "iverilog + vvp", image: "", group: "build", badge: null, enabled: true },
+  { id: "synthesis", label: "Sentez", description: "Yosys sentez", image: "", group: "build", badge: null, enabled: true },
+  { id: "verification", label: "Doğrulama", description: "Lint + smoke", image: "", group: "build", badge: null, enabled: true },
 ];
 
-/* ─────────────────────────── Log parser ─────────────────────────── */
+function toActionCard(tool: ToolSpec): ActionCardSpec {
+  const ui = TOOL_UI[tool.id];
+  return {
+    id: tool.id,
+    icon: ui?.icon ?? <Wrench className="h-4 w-4" />,
+    label: tool.label,
+    description: tool.description,
+    infoText: ui?.infoText ?? tool.description,
+    color: ui?.color ?? "text-slate-400",
+    badge: tool.badge ?? undefined,
+  };
+}
+
+function sortBuildTools(tools: ToolSpec[]): ToolSpec[] {
+  const order = new Map(BUILD_FLOW_ORDER.map((id, index) => [id, index]));
+  return [...tools].sort((a, b) => (order.get(a.id as (typeof BUILD_FLOW_ORDER)[number]) ?? 99) - (order.get(b.id as (typeof BUILD_FLOW_ORDER)[number]) ?? 99));
+}
+
+function groupCatalogTools(tools: ToolSpec[]): { label: string; items: ActionCardSpec[] }[] {
+  const grouped = new Map<string, ActionCardSpec[]>();
+  for (const tool of tools) {
+    if (tool.group === "build") continue;
+    const label = TOOL_GROUP_LABELS[tool.group] ?? tool.group;
+    const items = grouped.get(label) ?? [];
+    items.push(toActionCard(tool));
+    grouped.set(label, items);
+  }
+  return Array.from(grouped.entries()).map(([label, items]) => ({ label, items }));
+}
+
+/* ─────────────────────────── Action button ─────────────────────────── */
+
+function useToolsCatalog() {
+  const [tools, setTools] = useState<ToolSpec[]>(FALLBACK_TOOLS);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    listTools()
+      .then((nextTools) => {
+        if (cancelled) return;
+        setTools(nextTools);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCatalogError(error instanceof Error ? error.message : String(error));
+        setTools(FALLBACK_TOOLS);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const enabled = useMemo(() => new Set(tools.filter((tool) => tool.enabled).map((tool) => tool.id)), [tools]);
+  const buildTools = useMemo(() => sortBuildTools(tools.filter((tool) => tool.group === "build")), [tools]);
+  const toolGroups = useMemo(() => groupCatalogTools(tools), [tools]);
+
+  return { tools, enabled, buildTools, toolGroups, catalogError, catalogLoading };
+}
+
+function CatalogStatusBanner({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/3 px-3 py-2 text-[11px] text-slate-500">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Araç kataloğu yükleniyor...
+      </div>
+    );
+  }
+  if (!error) return null;
+  return (
+    <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+      Araç kataloğu alınamadı; yalnızca yerel etkin araç listesi kullanılıyor. {error}
+    </div>
+  );
+}
+
+function MissingProjectBanner() {
+  return (
+    <div className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200">
+      Çalıştırmak için sol panelden bir proje seçin.
+    </div>
+  );
+}
+
+function ActionRow({
+  spec,
+  projectId,
+  layout,
+  toolEnabled,
+}: {
+  spec: ActionCardSpec;
+  projectId: string;
+  layout: "card" | "list";
+  toolEnabled: boolean;
+}) {
+  const { active, start } = useActiveJob();
+  const [openInfo, setOpenInfo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const isActiveHere = active?.action === spec.id && (active.status === "running" || active.status === "preparing" || active.status === "queued");
+  const otherRunning = active && !active.finishedAt && !isActiveHere;
+  const disabled = pending || isActiveHere || !!otherRunning || !toolEnabled || !projectId;
+
+  async function handleRun() {
+    if (!projectId) {
+      setError("Önce bir proje seç.");
+      return;
+    }
+    setError(null);
+    setPending(true);
+    try {
+      await start(projectId, spec.id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const button = (
+    <button
+      type="button"
+      onClick={handleRun}
+      disabled={disabled}
+      title={!toolEnabled ? "Bu araç bu sürümde etkin değil" : undefined}
+      className={cn(
+        "flex h-7 items-center gap-1 rounded border px-2 text-[11px] font-medium flex-shrink-0 transition-all",
+        isActiveHere
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+          : pending
+          ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
+          : disabled
+          ? "border-white/5 bg-white/3 text-slate-700 cursor-not-allowed"
+          : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-500/40 hover:text-violet-300"
+      )}
+    >
+      {isActiveHere ? (
+        <>
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          Çalışıyor
+        </>
+      ) : pending ? (
+        <>
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+          Başlatılıyor
+        </>
+      ) : (
+        <>
+          <Play className="h-2.5 w-2.5" />
+          Çalıştır
+        </>
+      )}
+    </button>
+  );
+
+  if (layout === "card") {
+    return (
+      <div className="rounded-xl border border-white/8 bg-white/3 p-3">
+        <div className="flex items-center gap-2">
+          <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border", spec.color)}>
+            {spec.icon}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-white">{spec.label}</p>
+            <p className="text-[11px] text-slate-500">{spec.description}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setOpenInfo((v) => !v)}
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded border transition-all",
+                openInfo
+                  ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
+                  : "border-white/8 text-slate-600 hover:text-slate-400"
+              )}
+            >
+              <Info className="h-3 w-3" />
+            </button>
+            {button}
+          </div>
+        </div>
+        {openInfo && (
+          <div className="mt-2 rounded-lg border border-violet-500/15 bg-violet-500/8 px-3 py-2">
+            <p className="text-[11px] text-slate-300 leading-relaxed">{spec.infoText}</p>
+          </div>
+        )}
+        {error && <p className="mt-2 text-[11px] text-rose-400">{error}</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/3 p-3">
+      <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/8", spec.color)}>
+        {spec.icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className="text-[13px] font-medium text-white">{spec.label}</p>
+          {spec.badge && (
+            <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
+              {spec.badge}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{spec.description}</p>
+        {error && <p className="mt-1 text-[11px] text-rose-400">{error}</p>}
+      </div>
+      {button}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Tabs ─────────────────────────── */
+
+function BuildTab({ projectName, projectId }: { projectName: string; projectId: string }) {
+  const { active } = useActiveJob();
+  const { enabled: enabledTools, buildTools, catalogError, catalogLoading } = useToolsCatalog();
+  const buildCards = useMemo(() => buildTools.map(toActionCard), [buildTools]);
+  const completedIdx = active ? buildCards.findIndex((o) => o.id === active.action) : -1;
+
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <CatalogStatusBanner loading={catalogLoading} error={catalogError} />
+      {!projectId && <MissingProjectBanner />}
+      <div className="rounded-lg border border-white/8 bg-white/3 p-3 mb-1">
+        <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">
+          {projectName} — Akış Sırası
+        </p>
+        <div className="flex items-center gap-1 flex-wrap">
+          {buildCards.map((opt, i) => (
+            <div key={opt.id} className="flex items-center gap-1">
+              <div
+                className={cn(
+                  "flex h-6 items-center gap-1 px-2 rounded-full text-[10px] font-medium border",
+                  active && completedIdx === i && active.finishedAt && active.status === "done"
+                    ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                    : active && completedIdx === i && !active.finishedAt
+                    ? "bg-amber-500/20 border-amber-500/30 text-amber-400 animate-pulse"
+                    : "bg-white/5 border-white/10 text-slate-500"
+                )}
+              >
+                <span>{i + 1}</span>
+                <span className="hidden sm:block">{opt.label}</span>
+              </div>
+              {i < buildCards.length - 1 && (
+                <ArrowRight className="h-3 w-3 text-slate-700 flex-shrink-0" />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {buildCards.map((opt) => (
+        <ActionRow
+          key={opt.id}
+          spec={opt}
+          projectId={projectId}
+          layout="card"
+          toolEnabled={enabledTools.has(opt.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ToolsTab({ projectName, projectId }: { projectName: string; projectId: string }) {
+  const { enabled: enabledTools, toolGroups, catalogError, catalogLoading } = useToolsCatalog();
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <CatalogStatusBanner loading={catalogLoading} error={catalogError} />
+      {!projectId && <MissingProjectBanner />}
+      <div className="rounded-lg border border-white/8 bg-white/3 px-3 py-2">
+        <p className="text-[10px] text-slate-500 font-medium">
+          <span className="text-slate-300">{projectName}</span> — Araç Takımı
+        </p>
+      </div>
+      {toolGroups.map((group) => (
+        <div key={group.label}>
+          <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+            {group.label}
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {group.items.map((tool) => (
+              <ActionRow
+                key={tool.id}
+                spec={tool}
+                projectId={projectId}
+                layout="list"
+                toolEnabled={enabledTools.has(tool.id)}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────── Analysis tab (job history) ─────────────────────────── */
+
+const STATUS_COLOR: Record<JobStatus, string> = {
+  queued: "text-slate-400",
+  running: "text-amber-400",
+  done: "text-emerald-400",
+  failed: "text-rose-400",
+  cancelled: "text-slate-500",
+};
+
+function formatTime(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleString("tr-TR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" });
+}
 
 interface LogEntry {
   level: "INFO" | "WARNING" | "ERROR";
@@ -190,249 +467,430 @@ interface LogEntry {
 function parseLogs(raw: string): LogEntry[] {
   return raw.split("\n").map((line) => {
     const m = line.match(/\[(INFO|WARNING|ERROR)\]\s+(.*)/);
-    if (!m) return { level: "INFO" as const, message: line, raw: line };
+    if (!m) {
+      // Backend log formatı [stdout]/[stderr] — stderr'i WARNING gibi göster
+      const sm = line.match(/^\[(stdout|stderr|system)\]\s*(.*)$/);
+      if (sm) {
+        const lvl = sm[1] === "stderr" ? "WARNING" : sm[1] === "system" ? "ERROR" : "INFO";
+        return { level: lvl as LogEntry["level"], message: sm[2], raw: line };
+      }
+      return { level: "INFO", message: line, raw: line };
+    }
     return { level: m[1] as LogEntry["level"], message: m[2], raw: line };
   });
-}
-
-/* ─────────────────────────── Sub-panels ─────────────────────────── */
-
-function BuildTab({ projectName, running, onRun }: { projectName: string; running: string | null; onRun: (id: string) => void }) {
-  const [openInfo, setOpenInfo] = useState<string | null>(null);
-  const completedIdx = running ? BUILD_OPTIONS.findIndex((o) => o.id === running) - 1 : -1;
-
-  return (
-    <div className="flex flex-col gap-2 p-4">
-      {/* Flow indicator */}
-      <div className="rounded-lg border border-white/8 bg-white/3 p-3 mb-1">
-        <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">
-          {projectName} — Akış Sırası
-        </p>
-        <div className="flex items-center gap-1 flex-wrap">
-          {BUILD_OPTIONS.map((opt, i) => (
-            <div key={opt.id} className="flex items-center gap-1">
-              <div className={cn(
-                "flex h-6 items-center gap-1 px-2 rounded-full text-[10px] font-medium border",
-                i <= completedIdx
-                  ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-                  : running && BUILD_OPTIONS.findIndex((o) => o.id === running) === i
-                  ? "bg-amber-500/20 border-amber-500/30 text-amber-400 animate-pulse"
-                  : "bg-white/5 border-white/10 text-slate-500"
-              )}>
-                <span>{i + 1}</span>
-                <span className="hidden sm:block">{opt.label}</span>
-              </div>
-              {i < BUILD_OPTIONS.length - 1 && (
-                <ArrowRight className="h-3 w-3 text-slate-700 flex-shrink-0" />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {BUILD_OPTIONS.map((opt) => (
-        <div key={opt.id} className="rounded-xl border border-white/8 bg-white/3 p-3">
-          <div className="flex items-center gap-2">
-            <div className={cn("flex h-8 w-8 items-center justify-center rounded-lg border", opt.color)}>
-              {opt.icon}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white">{opt.label}</p>
-              <p className="text-[11px] text-slate-500">{opt.description}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setOpenInfo(openInfo === opt.id ? null : opt.id)}
-                className={cn(
-                  "flex h-6 w-6 items-center justify-center rounded border transition-all",
-                  openInfo === opt.id
-                    ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
-                    : "border-white/8 text-slate-600 hover:text-slate-400"
-                )}
-              >
-                <Info className="h-3 w-3" />
-              </button>
-              <button
-                onClick={() => onRun(opt.id)}
-                disabled={running !== null}
-                className={cn(
-                  "flex h-6 items-center gap-1 px-2 rounded border text-[11px] font-medium transition-all",
-                  running === opt.id
-                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                    : running !== null
-                    ? "border-white/5 bg-white/3 text-slate-700 cursor-not-allowed"
-                    : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-500/40 hover:text-violet-300"
-                )}
-              >
-                {running === opt.id ? (
-                  <><span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Çalışıyor</>
-                ) : (
-                  <><Play className="h-2.5 w-2.5" />Çalıştır</>
-                )}
-              </button>
-            </div>
-          </div>
-          {openInfo === opt.id && (
-            <div className="mt-2 rounded-lg border border-violet-500/15 bg-violet-500/8 px-3 py-2">
-              <p className="text-[11px] text-slate-300 leading-relaxed">{opt.infoText}</p>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ToolsTab({ projectName }: { projectName: string }) {
-  const [runningTool, setRunningTool] = useState<string | null>(null);
-
-  function handleRun(id: string) {
-    setRunningTool(id);
-    setTimeout(() => setRunningTool(null), 2500);
-  }
-
-  return (
-    <div className="flex flex-col gap-3 p-4">
-      <div className="rounded-lg border border-white/8 bg-white/3 px-3 py-2">
-        <p className="text-[10px] text-slate-500 font-medium">
-          <span className="text-slate-300">{projectName}</span> — Araç Takımı
-        </p>
-      </div>
-      {TOOL_GROUPS.map((group) => (
-        <div key={group.label}>
-          <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-600">{group.label}</p>
-          <div className="flex flex-col gap-1.5">
-            {group.items.map((tool) => (
-              <div key={tool.id} className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/3 p-3">
-                <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/8", tool.color)}>
-                  {tool.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-[13px] font-medium text-white">{tool.label}</p>
-                    {tool.badge && (
-                      <span className="rounded-full bg-emerald-500/15 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-400">
-                        {tool.badge}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-snug mt-0.5">{tool.description}</p>
-                </div>
-                <button
-                  onClick={() => handleRun(tool.id)}
-                  disabled={runningTool !== null}
-                  className={cn(
-                    "flex h-7 items-center gap-1 rounded-lg px-2.5 text-[11px] font-medium border flex-shrink-0 transition-all",
-                    runningTool === tool.id
-                      ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                      : runningTool !== null
-                      ? "border-white/5 bg-white/3 text-slate-700 cursor-not-allowed"
-                      : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-500/40 hover:text-violet-300"
-                  )}
-                >
-                  {runningTool === tool.id ? (
-                    <><span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />Çalışıyor</>
-                  ) : (
-                    <><Play className="h-2.5 w-2.5" />Çalıştır</>
-                  )}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function AnalysisTab({
   projectId,
   projectName,
   onAskAI,
+  onOpenWorkspaceFile,
 }: {
   projectId: string;
   projectName: string;
   onAskAI: (msg: string) => void;
+  onOpenWorkspaceFile?: (key: string) => void;
 }) {
+  const { active, attach } = useActiveJob();
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [jobsError, setJobsError] = useState<string | null>(null);
+  const [logText, setLogText] = useState<string>("");
+  const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
-  const rawLog = MOCK_LOG_OUTPUT[projectId] ?? "[INFO] Henüz analiz çıktısı mevcut değil.";
-  const entries = parseLogs(rawLog);
+  const [artifacts, setArtifacts] = useState<ObjectInfo[]>([]);
+  const [artifactsLoading, setArtifactsLoading] = useState(false);
+  const [artifactsError, setArtifactsError] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [netlistPreview, setNetlistPreview] = useState<string | null>(null);
+  const [netlistLoading, setNetlistLoading] = useState(false);
+
+  const loadJobs = useCallback(async () => {
+    if (!projectId) return;
+    setJobsLoading(true);
+    setJobsError(null);
+    try {
+      const list = await listJobs(projectId, 50, 0);
+      setJobs(list);
+      setSelectedId((prev) => {
+        if (prev && list.some((job) => job.id === prev)) return prev;
+        return list[0]?.id ?? null;
+      });
+    } catch (error) {
+      setJobsError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setJobsLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    void loadJobs();
+  }, [loadJobs, active?.finishedAt]);
+
+  const selectedJob = useMemo(() => jobs.find((j) => j.id === selectedId) ?? null, [jobs, selectedId]);
+  const isLiveSelectedJob = Boolean(
+    selectedJob && active && active.jobId === selectedJob.id && !active.finishedAt
+  );
+
+  useEffect(() => {
+    setAiSummary(null);
+    setAiError(null);
+    setNetlistPreview(null);
+  }, [selectedJob?.id]);
+
+  useEffect(() => {
+    if (!selectedJob?.artifacts_prefix) {
+      setArtifacts([]);
+      setArtifactsError(null);
+      return;
+    }
+    let cancelled = false;
+    setArtifactsLoading(true);
+    setArtifactsError(null);
+    FileAPI.listObjects(projectId, selectedJob.artifacts_prefix, true)
+      .then((objects) => {
+        if (!cancelled) setArtifacts(objects);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setArtifacts([]);
+          setArtifactsError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setArtifactsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, selectedJob?.artifacts_prefix]);
+
+  const netlistKey = useMemo(() => {
+    const fromArtifacts = artifacts.find((item) => item.key.endsWith("netlist.v"))?.key;
+    if (fromArtifacts) return fromArtifacts;
+    return artifacts.find((item) => item.key.endsWith(".v"))?.key ?? null;
+  }, [artifacts]);
+
+  useEffect(() => {
+    if (!netlistKey) {
+      setNetlistPreview(null);
+      return;
+    }
+    let cancelled = false;
+    setNetlistLoading(true);
+    FileAPI.getObjectText(projectId, netlistKey)
+      .then((text) => {
+        if (!cancelled) setNetlistPreview(text);
+      })
+      .catch(() => {
+        if (!cancelled) setNetlistPreview(null);
+      })
+      .finally(() => {
+        if (!cancelled) setNetlistLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [netlistKey, projectId]);
+
+  useEffect(() => {
+    if (!selectedJob) return;
+    if (isLiveSelectedJob && active) {
+      const streamed = active.lines.map((line) => `[${line.stream}] ${line.line}`).join("\n");
+      setLogText(streamed);
+      setLogLoading(false);
+      setLogError(
+        streamed.length > 0
+          ? null
+          : "Canlı izleme — ayrıntılı akış için alttaki terminali kullanın."
+      );
+      return;
+    }
+    if (!selectedJob.log_object_key) {
+      setLogText("");
+      setLogError(selectedJob.status === "running" ? "Job hâlâ çalışıyor — log henüz yüklenmedi." : "Bu job için log mevcut değil.");
+      return;
+    }
+    let cancelled = false;
+    setLogLoading(true);
+    setLogError(null);
+    getJobLog(selectedJob.id)
+      .then((text) => {
+        if (!cancelled) setLogText(text);
+      })
+      .catch((e) => {
+        if (!cancelled) setLogError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, isLiveSelectedJob, selectedJob]);
+
+  const entries = useMemo(() => parseLogs(logText), [logText]);
   const errors = entries.filter((e) => e.level === "ERROR");
   const warnings = entries.filter((e) => e.level === "WARNING");
 
+  if (!projectId) {
+    return (
+      <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-slate-500">
+        Önce sol panelden bir proje seç.
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3 p-4">
-      {/* Header stats */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 rounded-lg border border-white/8 bg-white/3 p-3">
-          <p className="text-[10px] text-slate-500 mb-1 font-medium">{projectName} — Son Çalıştırma</p>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-xs font-semibold text-rose-400">
-              <AlertCircle className="h-3.5 w-3.5" /> {errors.length} Hata
-            </span>
-            <span className="flex items-center gap-1 text-xs font-semibold text-amber-400">
-              <AlertTriangle className="h-3.5 w-3.5" /> {warnings.length} Uyarı
-            </span>
+      <div className="rounded-lg border border-white/8 bg-white/3 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">
+            {projectName} — Geçmiş Çalıştırmalar
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void loadJobs()}
+              disabled={jobsLoading}
+              className="flex h-6 items-center gap-1 rounded border border-white/10 bg-white/5 px-2 text-[10px] font-medium text-slate-400 hover:text-slate-200 disabled:opacity-50"
+              title="Listeyi yenile"
+            >
+              {jobsLoading ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+              Yenile
+            </button>
+            {selectedJob && (
+              <button
+                type="button"
+                onClick={() => attach(selectedJob.id, selectedJob.project_id, selectedJob.action)}
+                className="flex items-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300 hover:bg-violet-500/15"
+                title="Terminale yükle"
+              >
+                <Eye className="h-2.5 w-2.5" /> Terminale yükle
+              </button>
+            )}
           </div>
         </div>
-        {/* Raw / Analyzed toggle */}
-        <div className="flex rounded-lg border border-white/8 bg-white/3 p-1 gap-1">
-          <button
-            onClick={() => setShowRaw(false)}
-            className={cn(
-              "flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-all",
-              !showRaw ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"
-            )}
-          >
-            <Eye className="h-3 w-3" /> Analiz
-          </button>
-          <button
-            onClick={() => setShowRaw(true)}
-            className={cn(
-              "flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-all",
-              showRaw ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"
-            )}
-          >
-            <Code className="h-3 w-3" /> Ham
-          </button>
-        </div>
+        {jobsError && <p className="mb-2 text-[11px] text-rose-400">{jobsError}</p>}
+        {jobsLoading && jobs.length === 0 ? (
+          <p className="flex items-center justify-center gap-2 py-3 text-[11px] text-slate-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Çalıştırmalar yükleniyor...
+          </p>
+        ) : jobs.length === 0 ? (
+          <p className="text-center text-[11px] text-slate-600 py-3">Henüz çalıştırma yok.</p>
+        ) : (
+          <div className="flex flex-col gap-1 max-h-44 overflow-y-auto">
+            {jobs.map((j) => (
+              <button
+                key={j.id}
+                type="button"
+                onClick={() => setSelectedId(j.id)}
+                className={cn(
+                  "flex items-center gap-2 rounded border border-white/5 px-2 py-1.5 text-left text-[11px] transition-colors hover:bg-white/5",
+                  selectedId === j.id && "border-violet-500/40 bg-violet-500/10"
+                )}
+              >
+                <Bug className={cn("h-3 w-3 flex-shrink-0", STATUS_COLOR[j.status])} />
+                <span className="flex-1 truncate text-slate-300 font-medium">{j.action}</span>
+                <span className="text-slate-600 flex items-center gap-1">
+                  <Clock className="h-2.5 w-2.5" />
+                  {formatTime(j.created_at)}
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full border px-1.5 py-px text-[9px] font-medium",
+                    j.status === "done" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+                    j.status === "failed" && "border-rose-500/30 bg-rose-500/10 text-rose-400",
+                    j.status === "running" && "border-amber-500/30 bg-amber-500/10 text-amber-400",
+                    j.status === "cancelled" && "border-slate-500/30 bg-slate-500/10 text-slate-400",
+                    j.status === "queued" && "border-slate-500/30 bg-slate-500/10 text-slate-400"
+                  )}
+                >
+                  {j.status}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {showRaw ? (
-        <div className="rounded-xl border border-white/8 bg-[#0d1117] p-3 overflow-x-auto">
-          <pre className="text-[11px] text-slate-400 font-mono leading-relaxed whitespace-pre-wrap">{rawLog}</pre>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {errors.length === 0 && warnings.length === 0 && (
-            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-4 text-center">
-              <CheckCircle2 className="h-6 w-6 text-emerald-400 mx-auto mb-1" />
-              <p className="text-xs text-emerald-300 font-medium">Hata ve uyarı bulunamadı</p>
+      {selectedJob && (
+        <>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 rounded-lg border border-white/8 bg-white/3 p-3">
+              <p className="text-[10px] text-slate-500 mb-1 font-medium">{selectedJob.action} — Özet</p>
+              <div className="flex items-center gap-3">
+                <span className="flex items-center gap-1 text-xs font-semibold text-rose-400">
+                  <AlertCircle className="h-3.5 w-3.5" /> {errors.length} Hata
+                </span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5" /> {warnings.length} Uyarı
+                </span>
+                {selectedJob.exit_code !== null && (
+                  <span className="text-[11px] text-slate-500">exit {selectedJob.exit_code}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex rounded-lg border border-white/8 bg-white/3 p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setShowRaw(false)}
+                className={cn(
+                  "flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-all",
+                  !showRaw ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"
+                )}
+              >
+                <Eye className="h-3 w-3" /> Analiz
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRaw(true)}
+                className={cn(
+                  "flex h-6 items-center gap-1 rounded px-2 text-[11px] font-medium transition-all",
+                  showRaw ? "bg-violet-500/20 text-violet-300" : "text-slate-500 hover:text-slate-300"
+                )}
+              >
+                <Code className="h-3 w-3" /> Ham
+              </button>
+            </div>
+          </div>
+
+          {isLiveSelectedJob && (
+            <p className="text-[11px] text-amber-300">
+              Seçili job canlı çalışıyor; satırlar terminal ile eşzamanlı güncellenir.
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={aiLoading || !logText}
+              onClick={() => {
+                setAiLoading(true);
+                setAiError(null);
+                void analyzeLog(logText)
+                  .then((summary) => setAiSummary(summary))
+                  .catch((error) => setAiError(error instanceof Error ? error.message : String(error)))
+                  .finally(() => setAiLoading(false));
+              }}
+              className="flex h-7 items-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 text-[11px] font-medium text-violet-300 disabled:opacity-50"
+            >
+              {aiLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <MessageCircle className="h-3 w-3" />}
+              Logu AI ile özetle
+            </button>
+            {netlistKey && onOpenWorkspaceFile && (
+              <button
+                type="button"
+                onClick={() => onOpenWorkspaceFile(netlistKey)}
+                className="flex h-7 items-center gap-1 rounded border border-white/10 bg-white/5 px-2 text-[11px] font-medium text-slate-300"
+              >
+                <Code className="h-3 w-3" />
+                Netlisti editörde aç
+              </button>
+            )}
+          </div>
+          {aiError && <p className="text-[11px] text-rose-400">{aiError}</p>}
+          {aiSummary && (
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/8 p-3">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-violet-300">AI özeti</p>
+              <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-slate-300">{aiSummary}</p>
             </div>
           )}
 
-          {errors.length > 0 && (
-            <div>
-              <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-rose-600">
-                Hatalar ({errors.length})
-              </p>
-              {errors.map((e, i) => (
-                <LogEntryCard key={i} entry={e} onAskAI={onAskAI} projectName={projectName} />
-              ))}
+          {(artifactsLoading || artifacts.length > 0 || artifactsError) && (
+            <div className="rounded-lg border border-white/8 bg-white/3 p-3">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">Artefaktlar</p>
+              {artifactsLoading && (
+                <p className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Artefaktlar yükleniyor...
+                </p>
+              )}
+              {artifactsError && <p className="text-[11px] text-rose-400">{artifactsError}</p>}
+              {!artifactsLoading && artifacts.length === 0 && !artifactsError && (
+                <p className="text-[11px] text-slate-600">Bu çalıştırma için artefakt listesi boş.</p>
+              )}
+              <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
+                {artifacts.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => onOpenWorkspaceFile?.(item.key)}
+                    disabled={!onOpenWorkspaceFile}
+                    className="truncate rounded border border-white/5 px-2 py-1 text-left text-[11px] text-slate-300 hover:bg-white/5 disabled:cursor-default disabled:opacity-70"
+                  >
+                    {item.key.replace(selectedJob.artifacts_prefix ?? "", "").replace(/^\//, "") || item.key}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
-          {warnings.length > 0 && (
-            <div>
-              <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600">
-                Uyarılar ({warnings.length})
-              </p>
-              {warnings.map((e, i) => (
-                <LogEntryCard key={i} entry={e} onAskAI={onAskAI} projectName={projectName} />
-              ))}
+          {netlistKey && (
+            <div className="rounded-xl border border-white/8 bg-[#0d1117] p-3">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">Netlist önizleme</p>
+              {netlistLoading ? (
+                <p className="flex items-center gap-2 text-[11px] text-slate-500">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Netlist yükleniyor...
+                </p>
+              ) : (
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-slate-400">
+                  {netlistPreview ?? "(netlist okunamadı)"}
+                </pre>
+              )}
             </div>
           )}
-        </div>
+
+          {logLoading && (
+            <div className="flex items-center gap-2 text-[11px] text-slate-500">
+              <Loader2 className="h-3 w-3 animate-spin" /> Log getiriliyor...
+            </div>
+          )}
+          {logError && <p className="text-[11px] text-rose-400">{logError}</p>}
+
+          {!logLoading && (
+            showRaw ? (
+              <div className="rounded-xl border border-white/8 bg-[#0d1117] p-3 overflow-x-auto max-h-[60vh]">
+                <pre className="text-[11px] text-slate-400 font-mono leading-relaxed whitespace-pre-wrap">{logText || "(boş)"}</pre>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {errors.length === 0 && warnings.length === 0 && (
+                  <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/8 p-4 text-center">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-400 mx-auto mb-1" />
+                    <p className="text-xs text-emerald-300 font-medium">Hata ve uyarı bulunamadı</p>
+                  </div>
+                )}
+                {errors.length > 0 && (
+                  <div>
+                    <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-rose-600">
+                      Hatalar ({errors.length})
+                    </p>
+                    {errors.slice(0, 50).map((e, i) => (
+                      <LogEntryCard key={i} entry={e} onAskAI={onAskAI} projectName={projectName} />
+                    ))}
+                  </div>
+                )}
+                {warnings.length > 0 && (
+                  <div>
+                    <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-amber-600">
+                      Uyarılar ({warnings.length})
+                    </p>
+                    {warnings.slice(0, 50).map((e, i) => (
+                      <LogEntryCard key={i} entry={e} onAskAI={onAskAI} projectName={projectName} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+        </>
       )}
     </div>
   );
@@ -449,12 +907,12 @@ function LogEntryCard({
 }) {
   const isError = entry.level === "ERROR";
   return (
-    <div className={cn(
-      "mb-1.5 rounded-xl border p-3",
-      isError
-        ? "border-rose-500/20 bg-rose-500/8"
-        : "border-amber-500/20 bg-amber-500/8"
-    )}>
+    <div
+      className={cn(
+        "mb-1.5 rounded-xl border p-3",
+        isError ? "border-rose-500/20 bg-rose-500/8" : "border-amber-500/20 bg-amber-500/8"
+      )}
+    >
       <div className="flex items-start gap-2">
         <span className="mt-0.5 flex-shrink-0">
           {isError ? (
@@ -467,6 +925,7 @@ function LogEntryCard({
       </div>
       <div className="mt-2 flex justify-end">
         <button
+          type="button"
           onClick={() =>
             onAskAI(
               `${projectName} projesinde şu ${isError ? "hata" : "uyarı"} ile karşılaştım, nasıl çözebilirim?\n\n\`\`\`\n${entry.raw}\n\`\`\``
@@ -489,30 +948,24 @@ export function AgentWorkflowBody({
   projectId,
   projectName,
   onAskAI,
+  onOpenWorkspaceFile,
 }: {
   activeTab: AgentWorkflowTab;
   projectId: string;
   projectName: string;
   onAskAI: (msg: string) => void;
+  onOpenWorkspaceFile?: (key: string) => void;
 }) {
-  const [running, setRunning] = useState<string | null>(null);
-
-  function handleRun(id: string) {
-    setRunning(id);
-    setTimeout(() => setRunning(null), 3000);
-  }
-
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {activeTab === "build" && (
-        <BuildTab projectName={projectName} running={running} onRun={handleRun} />
-      )}
-      {activeTab === "tools" && <ToolsTab projectName={projectName} />}
+      {activeTab === "build" && <BuildTab projectName={projectName} projectId={projectId} />}
+      {activeTab === "tools" && <ToolsTab projectName={projectName} projectId={projectId} />}
       {activeTab === "analysis" && (
         <AnalysisTab
           projectId={projectId}
           projectName={projectName}
           onAskAI={onAskAI}
+          onOpenWorkspaceFile={onOpenWorkspaceFile}
         />
       )}
     </div>
@@ -548,10 +1001,10 @@ export default function RightPanel({
 
   return (
     <div className="absolute right-0 top-0 h-full w-[440px] flex flex-col border-l border-white/10 bg-[#0d1117] shadow-2xl z-30">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 flex-shrink-0">
         <p className="text-xs font-semibold text-slate-400">{projectName}</p>
         <button
+          type="button"
           onClick={onClose}
           className="flex h-6 w-6 items-center justify-center rounded text-slate-600 hover:bg-white/8 hover:text-slate-300 transition-colors"
         >
@@ -559,11 +1012,11 @@ export default function RightPanel({
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex border-b border-white/8 flex-shrink-0">
         {TABS.map((t) => (
           <button
             key={t.id}
+            type="button"
             onClick={() => setTab(t.id)}
             className={cn(
               "flex flex-1 items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-b-2 transition-all",
@@ -578,7 +1031,6 @@ export default function RightPanel({
         ))}
       </div>
 
-      {/* Content */}
       <AgentWorkflowBody
         activeTab={tab}
         projectId={projectId}

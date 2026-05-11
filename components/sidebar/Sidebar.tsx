@@ -104,7 +104,7 @@ function DeleteDialog({ project, onConfirm, onCancel, deleting }: DeleteDialogPr
           <span className="text-sm font-semibold">Projeyi Sil</span>
         </div>
         <p className="mb-1 text-xs text-slate-300">
-          <span className="font-medium text-white">{project.name}</span> projesi ve MinIO bucket&apos;ı{" "}
+          <span className="font-medium text-white">{project.name}</span> projesi ve workspace klasörü{" "}
           <span className="font-medium text-rose-400">{project.bucket}</span> kalıcı olarak silinecek.
         </p>
         <p className="mb-4 text-xs text-slate-500">Tüm dosyalar geri alınamaz şekilde silinir.</p>
@@ -155,28 +155,26 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
 
   useEffect(() => {
     setSettings(getSettings());
-    loadProjectsFromMinIO();
+    loadProjectsFromWorkspace();
   }, []);
 
   /**
-   * Fetch real buckets from MinIO and merge with localStorage projects.
-   * - Buckets in MinIO but not in localStorage → auto-add (display name from bucket slug)
-   * - Projects in localStorage but bucket no longer in MinIO → remove
-   * - When MinIO is unreachable → fallback to localStorage only
+   * Fetch workspace projects and merge with localStorage projects.
+   * - Projects on disk but not in localStorage → auto-add (display name from slug)
+   * - Projects in localStorage but folder no longer exists → remove
+   * - When workspace API is unreachable → fallback to localStorage only
    */
-  async function loadProjectsFromMinIO() {
+  async function loadProjectsFromWorkspace() {
     setLoadingProjects(true);
     try {
       const buckets = await BucketAPI.list();
       const stored = getProjects();
-      const minioNames = new Set(buckets.map((b) => b.name));
+      const workspaceNames = new Set(buckets.map((b) => b.name));
 
-      // Keep projects whose buckets still exist in MinIO
-      const surviving = stored.filter((p) => minioNames.has(p.bucket));
+      const surviving = stored.filter((p) => workspaceNames.has(p.bucket));
       const survivingBuckets = new Set(surviving.map((p) => p.bucket));
 
-      // Auto-add buckets that exist in MinIO but aren't in localStorage
-      const newFromMinIO: Project[] = buckets
+      const newFromWorkspace: Project[] = buckets
         .filter((b) => !survivingBuckets.has(b.name))
         .map((b) => ({
           id: `proj-${b.name}`,
@@ -185,7 +183,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
           createdAt: b.createdAt,
         }));
 
-      const merged = [...surviving, ...newFromMinIO];
+      const merged = [...surviving, ...newFromWorkspace];
       setProjects(merged);
       saveProjects(merged);
 
@@ -196,7 +194,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
         saveActiveProjectId(merged[0].id);
       }
     } catch {
-      // MinIO / Go service not reachable — fall back to localStorage
+      // Workspace API not reachable — fall back to localStorage
       const stored = getProjects();
       setProjects(stored);
     } finally {
@@ -224,7 +222,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
     setCreateError(null);
     try {
       await BucketAPI.create(bucket);
-      // Optimistically add to local list, then sync from MinIO
+      // Optimistically add to local list, then sync from workspace
       const newProject: Project = {
         id: `proj-${Date.now()}`,
         name,
@@ -239,7 +237,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
       setNewProjectName("");
       setShowNewProject(false);
       // Background sync to pick up any other buckets created externally
-      loadProjectsFromMinIO();
+      loadProjectsFromWorkspace();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -300,10 +298,10 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
             action={
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => loadProjectsFromMinIO()}
+                  onClick={() => loadProjectsFromWorkspace()}
                   disabled={loadingProjects}
                   className="flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-white/8 hover:text-slate-300 transition-colors disabled:opacity-40"
-                  title="MinIO'dan yenile"
+                  title="Workspace'ten yenile"
                 >
                   {loadingProjects
                     ? <Loader2 className="h-3 w-3 animate-spin" />

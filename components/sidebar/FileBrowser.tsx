@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/types";
 import { buildFileTree, isTextFile } from "@/lib/types";
 import { FileAPI } from "@/lib/api";
+import { WORKSPACE_REFRESH_EVENT } from "@/lib/workspace-events";
 
 export type { FileNode };
 
@@ -267,6 +268,16 @@ export default function FileBrowser({ bucket, onOpenFile }: FileBrowserProps) {
   }, [bucket]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    function onWorkspaceRefresh(event: Event) {
+      const detail = (event as CustomEvent<{ projectId?: string }>).detail;
+      if (detail?.projectId && detail.projectId !== bucket) return;
+      void refresh();
+    }
+    window.addEventListener(WORKSPACE_REFRESH_EVENT, onWorkspaceRefresh);
+    return () => window.removeEventListener(WORKSPACE_REFRESH_EVENT, onWorkspaceRefresh);
+  }, [bucket, refresh]);
 
   // ── Create file (root or in subfolder) ──
 

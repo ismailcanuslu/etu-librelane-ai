@@ -16,14 +16,6 @@ export interface ListObjectsResponse {
   objects: ObjectInfo[];
 }
 
-export interface PresignResponse {
-  bucket: string;
-  key: string;
-  expiresIn: string;
-  presignedGet: string;
-  recommendedUse: string;
-}
-
 export interface BucketInfo {
   name: string;
   createdAt: string;
@@ -54,7 +46,7 @@ export interface Message {
 export interface Project {
   id: string;
   name: string;
-  /** MinIO bucket name (sanitized). Each project maps to one bucket. */
+  /** Workspace project slug (sanitized). Each project maps to one folder. */
   bucket: string;
   createdAt: string;
 }
@@ -69,10 +61,65 @@ export interface FileTab {
   dirty: boolean;
 }
 
+// ─── Job runner ──────────────────────────────────────────────────────────────
+
+export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
+
+export interface ToolSpec {
+  id: string;
+  label: string;
+  description: string;
+  image: string;
+  group: string;
+  badge: string | null;
+  enabled: boolean;
+}
+
+export interface Job {
+  id: string;
+  project_id: string;
+  action: string;
+  image: string;
+  command: string;
+  status: JobStatus;
+  exit_code: number | null;
+  log_object_key: string | null;
+  artifacts_prefix: string | null;
+  error_message: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export type JobEventType = "snapshot" | "status" | "line" | "done" | "error";
+
+export interface JobLineEvent {
+  stream: "stdout" | "stderr" | "system";
+  line: string;
+  ts: string;
+}
+
+export interface JobStatusEvent {
+  status: JobStatus | "preparing";
+  message?: string;
+  container_id?: string;
+}
+
+export interface JobDoneEvent {
+  status: JobStatus;
+  exit_code: number | null;
+  log_object_key: string | null;
+  artifacts_prefix: string | null;
+}
+
+export interface JobErrorEvent {
+  message: string;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Convert an arbitrary project name to a valid MinIO/S3 bucket name.
+ * Convert an arbitrary project name to a valid workspace project slug.
  * Rules: lowercase letters, digits, hyphens; 3-63 chars; no leading/trailing hyphens.
  */
 export function toBucketName(name: string): string {
@@ -100,7 +147,7 @@ export function isTextFile(ext?: string): boolean {
 }
 
 /**
- * Convert a flat list of ObjectInfo (MinIO) into a nested FileNode tree.
+ * Convert a flat list of ObjectInfo into a nested FileNode tree.
  * Pass prefix="" when each project has its own bucket (no prefix stripping needed).
  */
 export function buildFileTree(objects: ObjectInfo[], prefix: string): FileNode[] {

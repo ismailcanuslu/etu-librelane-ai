@@ -1,9 +1,15 @@
 /**
- * Go file microservice tabanı (veya gateway: aynı path’ler /buckets/... ile gider).
- * `MINIO_BACKEND` — `.env` / `.env.local` (örn. doğrudan servis :8080 veya gateway :8000).
+ * Gateway veya doğrudan backend tabanı.
+ * `WORKSPACE_BACKEND` / `MINIO_BACKEND` yalnızca sunucuda (Route Handlers) okunur.
  */
-export const FILE_SERVICE_BASE =
-  process.env.MINIO_BACKEND?.replace(/\/$/, "") ?? "http://localhost:8000";
+export function getFileServiceBase(): string {
+  const raw =
+    process.env.WORKSPACE_BACKEND?.trim().replace(/\/$/, "") ??
+    process.env.MINIO_BACKEND?.trim().replace(/\/$/, "") ??
+    "";
+  if (raw.length > 0) return raw;
+  return "http://127.0.0.1:8000";
+}
 
 /** Encode each path segment for upstream paths (keys may contain spaces, unicode, etc.) */
 export function encodeObjectKeyPath(key: string): string {
@@ -14,18 +20,18 @@ export function encodeObjectKeyPath(key: string): string {
     .join("/");
 }
 
-export function upstreamObjectsPath(bucket: string, key: string): string {
-  return `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}/objects/${encodeObjectKeyPath(key)}`;
+export function upstreamProjectsPath(): string {
+  return `${getFileServiceBase()}/workspace/projects`;
 }
 
-export function upstreamObjectsMetaPath(bucket: string, key: string): string {
-  return `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}/meta/${encodeObjectKeyPath(key)}`;
+export function upstreamProjectPath(projectId: string): string {
+  return `${getFileServiceBase()}/workspace/projects/${encodeURIComponent(projectId)}`;
 }
 
-export function upstreamPresignPath(bucket: string, key: string): string {
-  return `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}/presign/${encodeObjectKeyPath(key)}`;
+export function upstreamObjectsPath(projectId: string, key: string): string {
+  return `${getFileServiceBase()}/workspace/projects/${encodeURIComponent(projectId)}/objects/${encodeObjectKeyPath(key)}`;
 }
 
-export function upstreamBucketPath(bucket: string): string {
-  return `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}`;
+export function upstreamObjectsMetaPath(projectId: string, key: string): string {
+  return `${getFileServiceBase()}/workspace/projects/${encodeURIComponent(projectId)}/meta/${encodeObjectKeyPath(key)}`;
 }

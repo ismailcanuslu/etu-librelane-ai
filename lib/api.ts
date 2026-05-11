@@ -1,9 +1,9 @@
 /**
- * FileAPI / BucketAPI — calls Next.js BFF API routes which proxy to the Go file service.
+ * FileAPI / BucketAPI — calls Next.js BFF routes which proxy to the workspace API.
  * Used only in Client Components / browser code.
  */
 
-import type { BucketInfo, ListObjectsResponse, ObjectInfo, PresignResponse } from "./types";
+import type { BucketInfo, ListObjectsResponse, ObjectInfo } from "./types";
 
 const FILES_BASE = "/api/files";
 const BUCKETS_BASE = "/api/buckets";
@@ -109,19 +109,5 @@ export const FileAPI = {
       await fetch(`${FILES_BASE}/${encodeURIComponent(bucket)}/${segments}`)
     );
     return res.blob();
-  },
-
-  /** Get a presigned download URL for an object */
-  async presignObject(bucket: string, key: string, expiryMinutes = 15): Promise<string> {
-    const segments = key.split("/").map(encodeURIComponent).join("/");
-    const params = new URLSearchParams({ expiryMinutes: String(expiryMinutes) });
-    const res = await throwIfError(
-      await fetch(
-        `${FILES_BASE}/${encodeURIComponent(bucket)}/presign/${segments}?${params}`,
-        { method: "POST" }
-      )
-    );
-    const data: PresignResponse = await res.json();
-    return data.presignedGet;
   },
 };

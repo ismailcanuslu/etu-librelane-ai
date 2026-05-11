@@ -1,7 +1,7 @@
-// POST /api/files/[bucket]/upload?key=<objectKey>  — upload file to bucket
+// POST /api/files/[bucket]/upload?key=<objectKey>  — upload file to project
 
 import type { NextRequest } from "next/server";
-import { FILE_SERVICE_BASE, encodeObjectKeyPath } from "@/lib/file-service";
+import { upstreamObjectsPath } from "@/lib/file-service";
 
 type Ctx = { params: Promise<{ bucket: string }> };
 
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     request.headers.get("content-type") ??
     "application/octet-stream";
 
-  const upstream = `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}/objects/${encodeObjectKeyPath(key)}`;
+  const upstream = upstreamObjectsPath(bucket, key);
 
   try {
     const body = await request.arrayBuffer();
@@ -29,7 +29,11 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     });
     const text = await res.text();
     let data: unknown = { raw: text };
-    try { data = text ? JSON.parse(text) : {}; } catch { /* non-JSON */ }
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      /* non-JSON */
+    }
     return Response.json(data as object, { status: res.status });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 502 });

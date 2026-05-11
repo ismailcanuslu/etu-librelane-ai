@@ -4,19 +4,10 @@ import { useState, useEffect } from "react";
 import { PanelRightClose, MessageSquare, Zap, Wrench, ScanSearch } from "lucide-react";
 import ChatThread from "@/components/chat/ChatThread";
 import { AgentWorkflowBody, type AgentWorkflowTab } from "@/components/build/RightPanel";
-import type { Message } from "@/lib/mock-data";
+import type { Message } from "@/lib/types";
+import { sendChatMessage } from "@/lib/ai-client";
 import { getChatHistory, saveChatHistory } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-const MOCK_RESPONSES = [
-  "Anladım! Bu konuyu LibreLane akışında ele alalım. Verilog modülünüzü analiz ediyorum...",
-  "Harika bir soru! OpenLane bu senaryoyu şu şekilde yönetir: sentez aşamasında Yosys kullanılır, ardından floorplanning ve routing adımları takip eder.",
-  "Bu tasarım için önerilen PnR konfigürasyonu şöyle olmalı. `config.json` dosyasını güncelleyelim.",
-  "Simülasyon çıktısını inceliyorum. GTKWave ile dalga formunu görselleştirmek için VCD dosyasını kullanabilirsiniz.",
-  "RTL doğrulaması tamamlandı. Testbench sonuçları beklenen değerlerle uyuşuyor. Sentez adımına geçebiliriz.",
-  "Bu hatayı inceledim. Timing ihlalinin nedeni kritik yol üzerindeki yüksek fanout. Buffering eklemenizi öneririm.",
-  "Uyarı mesajı şu anlama geliyor: latch çıkarımı (latch inference) istenmeyen davranışa yol açabilir. Tüm `always` bloklarında explicit reset kullanmayı deneyin.",
-];
 
 type AgentPanelTab = "chat" | AgentWorkflowTab;
 
@@ -29,11 +20,23 @@ const TABS: { id: AgentPanelTab; label: string; icon: React.ReactNode }[] = [
 
 interface AgentPanelProps {
   projectId: string;
+  /**
+   * Backend tool runner'a iletilen workspace proje kimliği. Job'lar bu
+   * isimle saklanır; UI projeleri seçimi için projectId (lokal) kullanır.
+   */
+  projectBucket: string;
   projectName: string;
   onClose: () => void;
+  onOpenWorkspaceFile?: (key: string) => void;
 }
 
-export default function AgentPanel({ projectId, projectName, onClose }: AgentPanelProps) {
+export default function AgentPanel({
+  projectId,
+  projectBucket,
+  projectName,
+  onClose,
+  onOpenWorkspaceFile,
+}: AgentPanelProps) {
   const [tab, setTab] = useState<AgentPanelTab>("chat");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,22 +46,27 @@ export default function AgentPanel({ projectId, projectName, onClose }: AgentPan
     setMessages(getChatHistory(projectId));
   }, [projectId]);
 
-  function handleSend(content: string) {
+  async function handleSend(content: string) {
     const userMsg: Message = {
       id: `msg-${Date.now()}-u`,
       role: "user",
       content,
       timestamp: new Date().toISOString(),
     };
+    let historyForApi: Message[] = [];
     setMessages((prev) => {
-      const updated = [...prev, userMsg];
-      saveChatHistory(projectId, updated);
-      return updated;
+      const withUser = [...prev, userMsg];
+      historyForApi = withUser;
+      saveChatHistory(projectId, withUser);
+      return withUser;
     });
     setIsLoading(true);
 
-    setTimeout(() => {
-      const reply = MOCK_RESPONSES[Math.floor(Math.random() * MOCK_RESPONSES.length)];
+    try {
+      const reply = await sendChatMessage(
+        content,
+        historyForApi.slice(0, -1).map((msg) => ({ role: msg.role, content: msg.content }))
+      );
       const assistantMsg: Message = {
         id: `msg-${Date.now()}-a`,
         role: "assistant",
@@ -70,8 +78,21 @@ export default function AgentPanel({ projectId, projectName, onClose }: AgentPan
         saveChatHistory(projectId, withReply);
         return withReply;
       });
+    } catch (error) {
+      const assistantMsg: Message = {
+        id: `msg-${Date.now()}-a`,
+        role: "assistant",
+        content: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => {
+        const withReply = [...prev, assistantMsg];
+        saveChatHistory(projectId, withReply);
+        return withReply;
+      });
+    } finally {
       setIsLoading(false);
-    }, 1200 + Math.random() * 800);
+    }
   }
 
   useEffect(() => {
@@ -137,9 +158,10 @@ export default function AgentPanel({ projectId, projectName, onClose }: AgentPan
         ) : (
           <AgentWorkflowBody
             activeTab={tab}
-            projectId={projectId}
+            projectId={projectBucket}
             projectName={projectName}
             onAskAI={handleWorkflowAskAI}
+            onOpenWorkspaceFile={onOpenWorkspaceFile}
           />
         )}
       </div>

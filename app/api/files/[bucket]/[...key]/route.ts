@@ -2,12 +2,12 @@
 // DELETE /api/files/[bucket]/[...key]  — delete object
 
 import type { NextRequest } from "next/server";
-import { FILE_SERVICE_BASE, encodeObjectKeyPath } from "@/lib/file-service";
+import { upstreamObjectsPath } from "@/lib/file-service";
 
 type Ctx = { params: Promise<{ bucket: string; key: string[] }> };
 
 function upstreamUrl(bucket: string, key: string[]) {
-  return `${FILE_SERVICE_BASE}/buckets/${encodeURIComponent(bucket)}/objects/${encodeObjectKeyPath(key.join("/"))}`;
+  return upstreamObjectsPath(bucket, key.join("/"));
 }
 
 export async function GET(_request: NextRequest, ctx: Ctx) {
@@ -19,7 +19,12 @@ export async function GET(_request: NextRequest, ctx: Ctx) {
     if (!res.ok) {
       const errText = await res.text();
       let message = `upstream ${res.status}`;
-      try { const j = JSON.parse(errText) as { error?: string }; if (j.error) message = j.error; } catch { if (errText) message = errText.slice(0, 200); }
+      try {
+        const j = JSON.parse(errText) as { error?: string };
+        if (j.error) message = j.error;
+      } catch {
+        if (errText) message = errText.slice(0, 200);
+      }
       return Response.json({ error: message }, { status: res.status });
     }
 
@@ -47,7 +52,11 @@ export async function DELETE(_request: NextRequest, ctx: Ctx) {
     });
     const text = await res.text();
     let data: unknown = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { error: text || "upstream error" }; }
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = { error: text || "upstream error" };
+    }
     return Response.json(data as object, { status: res.status });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 502 });

@@ -2,7 +2,7 @@
 
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
-import type { Message } from "@/lib/mock-data";
+import type { Message } from "@/lib/types";
 
 interface ChatThreadProps {
   messages: Message[];

@@ -7,6 +7,7 @@ import FileEditorTabs from "@/components/editor/FileEditorTabs";
 import AgentPanel from "@/components/workspace/AgentPanel";
 import WorkspaceTerminal from "@/components/workspace/WorkspaceTerminal";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { ActiveJobProvider, useActiveJob } from "@/lib/active-job-context";
 import { cn } from "@/lib/utils";
 import {
   getActiveProjectId,
@@ -15,8 +16,6 @@ import {
 } from "@/lib/store";
 import type { Project, FileTab, FileNode } from "@/lib/types";
 import { isTextFile } from "@/lib/types";
-
-// ─── Dosya sekmeleri (VS Code üst şeridi) ─────────────────────────────────────
 
 interface EditorTabBarProps {
   fileTabs: FileTab[];
@@ -91,51 +90,58 @@ function EmptyEditor() {
   );
 }
 
-// ─── ChatPage ─────────────────────────────────────────────────────────────────
-
-export default function ChatPage() {
-  const [activeProjectId, setActiveProjectId] = useState<string>("");
-  const [projects, setProjects] = useState<Project[]>([]);
+function ChatWorkspaceLayout({
+  activeProjectId,
+  projects,
+  onProjectChange,
+  agentOpen,
+  setAgentOpen,
+}: {
+  activeProjectId: string;
+  projects: Project[];
+  onProjectChange: (id: string) => void;
+  agentOpen: boolean;
+  setAgentOpen: (open: boolean) => void;
+}) {
+  const { active } = useActiveJob();
   const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
-  const [agentOpen, setAgentOpen] = useState(true);
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
   useEffect(() => {
-    const stored = getProjects();
-    const id = getActiveProjectId();
-    if (stored.length > 0) {
-      setProjects(stored);
-      const resolvedId = id || stored[0]?.id || "";
-      setActiveProjectId(resolvedId);
-      if (!id && stored[0]) saveActiveProjectId(stored[0].id);
-    }
-  }, []);
-
-  const handleProjectChange = useCallback((id: string) => {
-    setActiveProjectId(id);
-    saveActiveProjectId(id);
-    setProjects(getProjects());
-    setFileTabs([]);
-    setActiveFileKey(null);
-  }, []);
+    if (!active || active.finishedAt) return;
+    setTerminalCollapsed(false);
+  }, [active?.jobId, active?.finishedAt]);
 
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
     if (!isTextFile(node.ext)) return;
 
     setFileTabs((prev) => {
       if (prev.some((t) => t.key === node.key && t.bucket === bucket)) return prev;
-      const newTab: FileTab = {
-        key: node.key,
-        bucket,
-        name: node.name,
-        content: "",
-        dirty: false,
-      };
-      return [...prev, newTab];
+      return [
+        ...prev,
+        {
+          key: node.key,
+          bucket,
+          name: node.name,
+          content: "",
+          dirty: false,
+        },
+      ];
     });
     setActiveFileKey(node.key);
   }, []);
+
+  const handleOpenWorkspaceFile = useCallback(
+    (key: string) => {
+      const bucket = projects.find((p) => p.id === activeProjectId)?.bucket;
+      if (!bucket) return;
+      const name = key.split("/").pop() ?? key;
+      const ext = name.includes(".") ? name.split(".").pop() : undefined;
+      handleOpenFile({ name, type: "file", key, ext }, bucket);
+    },
+    [activeProjectId, handleOpenFile, projects]
+  );
 
   const handleTabClose = useCallback((key: string) => {
     setFileTabs((prev) => {
@@ -157,81 +163,117 @@ export default function ChatPage() {
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
 
   return (
-    <TooltipProvider>
-      <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
-        <Sidebar
-          activeProjectId={activeProjectId}
-          onProjectChange={handleProjectChange}
-          onOpenFile={handleOpenFile}
+    <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
+      <Sidebar
+        activeProjectId={activeProjectId}
+        onProjectChange={onProjectChange}
+        onOpenFile={handleOpenFile}
+      />
+
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {!agentOpen && (
+          <button
+            type="button"
+            onClick={() => setAgentOpen(true)}
+            className="absolute right-0 top-1/2 z-20 flex h-20 w-5 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-white/10 bg-[#252526] text-slate-500 shadow-lg transition-colors hover:bg-[#323232] hover:text-violet-400"
+            title="AI panelini aç"
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </button>
+        )}
+
+        <EditorTabBar
+          fileTabs={fileTabs}
+          activeFileKey={activeFileKey}
+          onSelectFile={setActiveFileKey}
+          onFileTabClose={handleTabClose}
         />
 
-        {/* Orta: düzenleyici + terminal */}
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          {!agentOpen && (
-            <button
-              type="button"
-              onClick={() => setAgentOpen(true)}
-              className="absolute right-0 top-1/2 z-20 flex h-20 w-5 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-white/10 bg-[#252526] text-slate-500 shadow-lg transition-colors hover:bg-[#323232] hover:text-violet-400"
-              title="AI panelini aç"
-            >
-              <PanelRightOpen className="h-4 w-4" />
-            </button>
-          )}
-
-          <EditorTabBar
-            fileTabs={fileTabs}
-            activeFileKey={activeFileKey}
-            onSelectFile={setActiveFileKey}
-            onFileTabClose={handleTabClose}
-          />
-
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {fileTabs.length > 0 && activeFileKey ? (
-                <FileEditorTabs
-                  tabs={fileTabs}
-                  activeKey={activeFileKey}
-                  onTabChange={setActiveFileKey}
-                  onTabClose={handleTabClose}
-                  onTabUpdate={handleTabUpdate}
-                  showTabBar={false}
-                />
-              ) : (
-                <EmptyEditor />
-              )}
-            </div>
-
-            <div
-              className={cn(
-                "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10 transition-[height,max-height] duration-200",
-                terminalCollapsed ? "h-auto" : "h-[min(32vh,240px)] max-h-[320px]"
-              )}
-            >
-              <WorkspaceTerminal
-                collapsed={terminalCollapsed}
-                onToggleCollapsed={() => setTerminalCollapsed((c) => !c)}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {fileTabs.length > 0 && activeFileKey ? (
+              <FileEditorTabs
+                tabs={fileTabs}
+                activeKey={activeFileKey}
+                onTabChange={setActiveFileKey}
+                onTabClose={handleTabClose}
+                onTabUpdate={handleTabUpdate}
+                showTabBar={false}
               />
-            </div>
+            ) : (
+              <EmptyEditor />
+            )}
+          </div>
+
+          <div
+            className={cn(
+              "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10 transition-[height,max-height] duration-200",
+              terminalCollapsed ? "h-auto" : "h-[min(32vh,240px)] max-h-[320px]"
+            )}
+          >
+            <WorkspaceTerminal
+              collapsed={terminalCollapsed}
+              onToggleCollapsed={() => setTerminalCollapsed((c) => !c)}
+              onOpenWorkspaceFile={handleOpenWorkspaceFile}
+            />
           </div>
         </div>
-
-        {/* Sağ: AI / araçlar */}
-        <div
-          className={cn(
-            "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10 transition-[width,min-width] duration-200 ease-out",
-            agentOpen ? "w-[min(420px,100vw)] min-w-[280px]" : "w-0 min-w-0 border-l-0"
-          )}
-        >
-          {agentOpen && (
-            <AgentPanel
-              key={activeProjectId}
-              projectId={activeProjectId}
-              projectName={activeProject?.name ?? ""}
-              onClose={() => setAgentOpen(false)}
-            />
-          )}
-        </div>
       </div>
+
+      <div
+        className={cn(
+          "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10 transition-[width,min-width] duration-200 ease-out",
+          agentOpen ? "w-[min(420px,100vw)] min-w-[280px]" : "w-0 min-w-0 border-l-0"
+        )}
+      >
+        {agentOpen && (
+          <AgentPanel
+            key={activeProjectId}
+            projectId={activeProjectId}
+            projectBucket={activeProject?.bucket ?? ""}
+            projectName={activeProject?.name ?? ""}
+            onClose={() => setAgentOpen(false)}
+            onOpenWorkspaceFile={handleOpenWorkspaceFile}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function ChatPage() {
+  const [activeProjectId, setActiveProjectId] = useState<string>("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [agentOpen, setAgentOpen] = useState(true);
+
+  useEffect(() => {
+    const stored = getProjects();
+    const id = getActiveProjectId();
+    if (stored.length > 0) {
+      setProjects(stored);
+      const resolvedId = id || stored[0]?.id || "";
+      setActiveProjectId(resolvedId);
+      if (!id && stored[0]) saveActiveProjectId(stored[0].id);
+    }
+  }, []);
+
+  const handleProjectChange = useCallback((id: string) => {
+    setActiveProjectId(id);
+    saveActiveProjectId(id);
+    setProjects(getProjects());
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <ActiveJobProvider>
+        <ChatWorkspaceLayout
+          activeProjectId={activeProjectId}
+          projects={projects}
+          onProjectChange={handleProjectChange}
+          agentOpen={agentOpen}
+          setAgentOpen={setAgentOpen}
+        />
+      </ActiveJobProvider>
     </TooltipProvider>
   );
 }
