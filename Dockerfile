@@ -35,8 +35,8 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
-# BFF bu adrese fetch eder. Konteyner içinde localhost makineyi göstermez; Docker Desktop’da host’taki gateway için:
-ENV MINIO_BACKEND=http://host.docker.internal:8000
-# Aynı docker ağında iseniz: docker run -e MINIO_BACKEND=http://librelane-gateway:8000 --network librelane-network ...
+# BFF sunucu tarafı fetch (Route Handlers). Konteyner içinde 127.0.0.1 host'u göstermez.
+# Backend aynı ağdaysa: -e WORKSPACE_BACKEND=http://librelane-backend:8001 --network librelane-network
+# Backend host'taysa (Linux): -e WORKSPACE_BACKEND=http://host.docker.internal:8001 --add-host=host.docker.internal:host-gateway
 
 CMD ["node", "server.js"]

@@ -1,3 +1,5 @@
+import { aiChatSocket } from "./ai-chat-client";
+
 async function readErrorMessage(data: unknown, status: number): Promise<string> {
   if (data && typeof data === "object") {
     const record = data as { error?: string; detail?: string | Array<{ msg?: string }> };
@@ -27,13 +29,23 @@ export async function analyzeLog(log: string): Promise<string> {
   return data.analysis ?? "";
 }
 
-export async function sendChatMessage(message: string, history: { role: "user" | "assistant"; content: string }[]): Promise<string> {
-  const res = await fetch("/api/ai/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, history }),
-    cache: "no-store",
-  });
-  const data = await asJsonOrThrow<{ reply?: string }>(res);
-  return data.reply ?? "";
+export function startChatTransport(): void {
+  aiChatSocket.start();
+}
+
+export function stopChatTransport(): void {
+  aiChatSocket.stop();
+}
+
+export function onLateChatReply(
+  handler: ((payload: { id: string; reply: string; replay: boolean }) => void) | null
+): void {
+  aiChatSocket.onLateReply(handler);
+}
+
+export async function sendChatMessage(
+  message: string,
+  history: { role: "user" | "assistant"; content: string }[]
+): Promise<string> {
+  return aiChatSocket.sendChatMessage(message, history);
 }

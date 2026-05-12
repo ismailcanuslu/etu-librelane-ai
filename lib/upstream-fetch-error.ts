@@ -50,8 +50,9 @@ export function describeUpstreamFetchFailure(err: unknown, upstream: string): Up
   if (code === "ECONNREFUSED") {
     hint =
       "ECONNREFUSED: Bu Node sürecinin gördüğü adreste backend (8001) dinlemiyor. " +
-      "WSL / uzak container kullanıyorsan 127.0.0.1 senin Linux/container içini gösterir; " +
-      "backend host’taysa WORKSPACE_BACKEND’i host IP ile ayarla (WSL: /etc/resolv.conf içindeki nameserver, genelde 172.x).";
+      "Panelde curl 127.0.0.1:8001 çalışıp Next 502 veriyorsa web muhtemelen Docker içinde; " +
+      "127.0.0.1 konteynerin kendisidir, host değil. WORKSPACE_BACKEND=http://librelane-backend:8001 (aynı ağ) " +
+      "veya http://host.docker.internal:8001 (backend host’ta) verin ve web konteynerini yeniden başlatın.";
   } else if (code === "ENOTFOUND") {
     hint = "ENOTFOUND: Hostname çözülemedi; WORKSPACE_BACKEND URL’sini kontrol et.";
   }

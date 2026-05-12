@@ -5,7 +5,7 @@ import { PanelRightClose, MessageSquare, Zap, Wrench, ScanSearch } from "lucide-
 import ChatThread from "@/components/chat/ChatThread";
 import { AgentWorkflowBody, type AgentWorkflowTab } from "@/components/build/RightPanel";
 import type { Message } from "@/lib/types";
-import { sendChatMessage } from "@/lib/ai-client";
+import { onLateChatReply, sendChatMessage, startChatTransport, stopChatTransport } from "@/lib/ai-client";
 import { getChatHistory, saveChatHistory } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,32 @@ export default function AgentPanel({
 
   useEffect(() => {
     setMessages(getChatHistory(projectId));
+  }, [projectId]);
+
+  useEffect(() => {
+    startChatTransport();
+    return () => {
+      stopChatTransport();
+    };
+  }, []);
+
+  useEffect(() => {
+    onLateChatReply(({ reply }) => {
+      const assistantMsg: Message = {
+        id: `msg-${Date.now()}-a`,
+        role: "assistant",
+        content: reply,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => {
+        const withReply = [...prev, assistantMsg];
+        saveChatHistory(projectId, withReply);
+        return withReply;
+      });
+    });
+    return () => {
+      onLateChatReply(null);
+    };
   }, [projectId]);
 
   async function handleSend(content: string) {

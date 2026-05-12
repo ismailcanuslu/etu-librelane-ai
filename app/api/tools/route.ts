@@ -5,7 +5,7 @@ import { describeUpstreamFetchFailure } from "@/lib/upstream-fetch-error";
 
 export async function GET() {
   const base = getFileServiceBase();
-  const upstream = `${base}/tools/`;
+  const upstream = `${base}/tools`;
   try {
     const res = await fetch(upstream, { cache: "no-store" });
     const data: unknown = await res.json().catch(() => ({}));

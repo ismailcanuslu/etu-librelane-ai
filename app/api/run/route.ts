@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const base = getFileServiceBase();
-  const upstream = `${base}/run/`;
+  const upstream = `${base}/run`;
   try {
     const res = await fetch(upstream, {
       method: "POST",

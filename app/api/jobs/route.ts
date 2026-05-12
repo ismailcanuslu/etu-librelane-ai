@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   if (offset) search.set("offset", offset);
 
   const base = getFileServiceBase();
-  const upstream = `${base}/jobs/${search.size ? `?${search.toString()}` : ""}`;
+  const upstream = `${base}/jobs${search.size ? `?${search.toString()}` : ""}`;
   try {
     const res = await fetch(upstream, { cache: "no-store" });
     const data: unknown = await res.json().catch(() => ({}));
