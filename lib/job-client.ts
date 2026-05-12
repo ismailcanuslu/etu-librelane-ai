@@ -8,6 +8,7 @@ import type {
   JobDoneEvent,
   JobErrorEvent,
   JobLineEvent,
+  JobStatus,
   JobStatusEvent,
   ToolSpec,
 } from "./types";
@@ -90,6 +91,29 @@ export async function cancelJob(jobId: string): Promise<{ cancelled: boolean }> 
   return asJsonOrThrow<{ cancelled: boolean }>(res);
 }
 
+export async function listTerminalTabs(projectId?: string): Promise<TerminalTab[]> {
+  const params = new URLSearchParams();
+  if (projectId) params.set("project_id", projectId);
+  const query = params.size ? `?${params.toString()}` : "";
+  const res = await fetch(`${RUN_BASE}/terminals${query}`, { cache: "no-store" });
+  const data = await asJsonOrThrow<{ tabs: TerminalTab[] }>(res);
+  return data.tabs ?? [];
+}
+
+export async function openTerminalTab(jobId: string): Promise<{ job_id: string }> {
+  const res = await fetch(`${RUN_BASE}/terminals/${encodeURIComponent(jobId)}`, {
+    method: "POST",
+  });
+  return asJsonOrThrow<{ job_id: string }>(res);
+}
+
+export async function closeTerminalTab(jobId: string): Promise<{ closed: boolean }> {
+  const res = await fetch(`${RUN_BASE}/terminals/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+  });
+  return asJsonOrThrow<{ closed: boolean }>(res);
+}
+
 export async function getJob(jobId: string): Promise<Job> {
   const res = await fetch(`${JOBS_BASE}/${encodeURIComponent(jobId)}`, { cache: "no-store" });
   return asJsonOrThrow<Job>(res);
@@ -117,6 +141,17 @@ export async function getJobLog(jobId: string): Promise<string> {
 
 export interface JobSubscription {
   close(): void;
+}
+
+export interface TerminalTab {
+  job_id: string;
+  project_id: string;
+  action: string;
+  status: JobStatus;
+  exit_code: number | null;
+  opened_at: string;
+  started_at: string | null;
+  finished_at: string | null;
 }
 
 export interface JobSubscribers {

@@ -10,7 +10,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getJobLog, parsePersistedJobLog, startJob, subscribeJob, cancelJob } from "./job-client";
+import {
+  closeTerminalTab,
+  getJobLog,
+  listTerminalTabs,
+  openTerminalTab,
+  parsePersistedJobLog,
+  startJob,
+  subscribeJob,
+  cancelJob,
+  type JobSubscription,
+} from "./job-client";
 import { requestWorkspaceRefresh } from "./workspace-events";
 import type { JobLineEvent, JobStatus, JobStatusEvent } from "./types";
 
@@ -22,7 +32,6 @@ export interface RunningJobState {
   startedAt: number;
   exitCode: number | null;
   lines: JobLineEvent[];
-  /** Mesai mesajları (preparing, container_id, vs.) */
   notes: string[];
   finishedAt: number | null;
   logObjectKey: string | null;
@@ -30,142 +39,174 @@ export interface RunningJobState {
 }
 
 interface ActiveJobContextValue {
+  tabs: RunningJobState[];
+  activeTabId: string | null;
   active: RunningJobState | null;
-  /** Backend'e POST /run yapar, yeni job'a abone olur. Önceki job hâlâ izleniyorsa onu bırakır. */
+  setActiveTab: (jobId: string) => void;
   start: (
     projectId: string,
     action: string,
     options?: { designName?: string; args?: string[] }
   ) => Promise<{ job_id: string }>;
-  /** Verili job'a (örn. geçmişten) sadece görüntüleme için bağlan — yeni job başlatmaz, snapshot+stream alır. */
-  attach: (jobId: string, projectId: string, action: string) => void;
-  /** Aktif job'u iptal etmeye çalışır. */
-  cancel: () => Promise<void>;
-  /** Aktif job state'ini temizler ama subscription'ı close eder. */
-  clear: () => void;
+  attach: (jobId: string, projectId: string, action: string) => Promise<void>;
+  cancel: (jobId?: string) => Promise<void>;
+  closeTab: (jobId: string) => Promise<void>;
+  clear: () => Promise<void>;
 }
 
 const ActiveJobContext = createContext<ActiveJobContextValue | null>(null);
 
-export function ActiveJobProvider({ children }: { children: ReactNode }) {
-  const [active, setActive] = useState<RunningJobState | null>(null);
-  const subRef = useRef<{ close(): void } | null>(null);
+const MAX_TERMINAL_TABS = 8;
 
-  const teardown = useCallback(() => {
-    subRef.current?.close();
-    subRef.current = null;
+function createJobState(jobId: string, projectId: string, action: string): RunningJobState {
+  return {
+    jobId,
+    action,
+    projectId,
+    status: "queued",
+    startedAt: Date.now(),
+    exitCode: null,
+    lines: [],
+    notes: [],
+    finishedAt: null,
+    logObjectKey: null,
+    artifactsPrefix: null,
+  };
+}
+
+export function ActiveJobProvider({
+  children,
+  projectId,
+}: {
+  children: ReactNode;
+  projectId?: string;
+}) {
+  const [tabs, setTabs] = useState<RunningJobState[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const subsRef = useRef<Map<string, JobSubscription>>(new Map());
+  const tabsRef = useRef<RunningJobState[]>([]);
+
+  useEffect(() => {
+    tabsRef.current = tabs;
+  }, [tabs]);
+
+  const teardown = useCallback((jobId: string) => {
+    subsRef.current.get(jobId)?.close();
+    subsRef.current.delete(jobId);
   }, []);
 
-  const subscribe = useCallback(
-    (jobId: string, projectId: string, action: string) => {
-      teardown();
+  const updateTab = useCallback((jobId: string, updater: (prev: RunningJobState) => RunningJobState) => {
+    setTabs((prev) => prev.map((tab) => (tab.jobId === jobId ? updater(tab) : tab)));
+  }, []);
 
-      setActive({
-        jobId,
-        action,
-        projectId,
-        status: "queued",
-        startedAt: Date.now(),
-        exitCode: null,
-        lines: [],
-        notes: [],
-        finishedAt: null,
-        logObjectKey: null,
-        artifactsPrefix: null,
-      });
+  const ensureSubscription = useCallback(
+    (jobId: string, projectId: string, action: string) => {
+      if (subsRef.current.has(jobId)) return;
 
       const hydrateFromPersistedLog = async () => {
         try {
           const text = await getJobLog(jobId);
           const parsed = parsePersistedJobLog(text);
           if (parsed.length === 0) return;
-          setActive((prev) =>
-            prev && prev.jobId === jobId && prev.lines.length === 0
-              ? { ...prev, lines: parsed }
-              : prev
+          setTabs((prev) =>
+            prev.map((tab) =>
+              tab.jobId === jobId && tab.lines.length === 0 ? { ...tab, lines: parsed } : tab
+            )
           );
         } catch {
           // log henüz workspace'e yazılmamış olabilir
         }
       };
 
-      subRef.current = subscribeJob(jobId, {
-        onSnapshot: (snap) => {
-          setActive((prev) =>
-            prev && prev.jobId === jobId
-              ? {
-                  ...prev,
-                  status: (snap.status as JobStatus) ?? prev.status,
-                  exitCode: snap.exit_code ?? prev.exitCode,
-                  action: snap.action ?? prev.action,
-                }
-              : prev
-          );
-          if (snap.status === "done" || snap.status === "failed" || snap.status === "cancelled") {
-            void hydrateFromPersistedLog();
-          }
-        },
-        onStatus: (st: JobStatusEvent) => {
-          setActive((prev) => {
-            if (!prev || prev.jobId !== jobId) return prev;
-            const next: RunningJobState = {
+      subsRef.current.set(
+        jobId,
+        subscribeJob(jobId, {
+          onSnapshot: (snap) => {
+            updateTab(jobId, (prev) => ({
               ...prev,
-              status: st.status,
-              notes: st.message ? [...prev.notes, st.message] : prev.notes,
-            };
-            if (st.message) {
-              next.lines = [
-                ...prev.lines,
-                {
-                  stream: "system",
-                  line: st.message,
-                  ts: new Date().toISOString(),
-                },
-              ];
+              status: (snap.status as JobStatus) ?? prev.status,
+              exitCode: snap.exit_code ?? prev.exitCode,
+              action: snap.action ?? prev.action,
+            }));
+            if (snap.status === "done" || snap.status === "failed" || snap.status === "cancelled") {
+              void hydrateFromPersistedLog();
             }
-            return next;
-          });
-        },
-        onLine: (line: JobLineEvent) => {
-          setActive((prev) =>
-            prev && prev.jobId === jobId
-              ? { ...prev, lines: [...prev.lines, line] }
-              : prev
-          );
-        },
-        onDone: (done) => {
-          setActive((prev) =>
-            prev && prev.jobId === jobId
-              ? {
-                  ...prev,
-                  status: done.status,
-                  exitCode: done.exit_code,
-                  finishedAt: Date.now(),
-                  logObjectKey: done.log_object_key,
-                  artifactsPrefix: done.artifacts_prefix,
-                }
-              : prev
-          );
-          requestWorkspaceRefresh(projectId);
-          void hydrateFromPersistedLog();
-        },
-        onError: (err) => {
-          setActive((prev) => {
-            if (!prev || prev.jobId !== jobId) return prev;
-            const message = `! ${err.message}`;
-            return {
+          },
+          onStatus: (st: JobStatusEvent) => {
+            updateTab(jobId, (prev) => {
+              const next: RunningJobState = {
+                ...prev,
+                status: st.status,
+                notes: st.message ? [...prev.notes, st.message] : prev.notes,
+              };
+              if (st.status === "cancelled") {
+                next.finishedAt = prev.finishedAt ?? Date.now();
+                next.exitCode = prev.exitCode ?? 130;
+              }
+              if (st.message) {
+                next.lines = [
+                  ...prev.lines,
+                  {
+                    stream: "system",
+                    line: st.message,
+                    ts: new Date().toISOString(),
+                  },
+                ];
+              }
+              return next;
+            });
+          },
+          onLine: (line: JobLineEvent) => {
+            updateTab(jobId, (prev) => ({ ...prev, lines: [...prev.lines, line] }));
+          },
+          onDone: (done) => {
+            updateTab(jobId, (prev) => ({
               ...prev,
-              notes: [...prev.notes, message],
-              lines: [
-                ...prev.lines,
-                { stream: "system", line: message, ts: new Date().toISOString() },
-              ],
-            };
-          });
-        },
-      });
+              status: done.status,
+              exitCode: done.exit_code,
+              finishedAt: Date.now(),
+              logObjectKey: done.log_object_key,
+              artifactsPrefix: done.artifacts_prefix,
+            }));
+            requestWorkspaceRefresh(projectId);
+            void hydrateFromPersistedLog();
+          },
+          onError: (err) => {
+            updateTab(jobId, (prev) => {
+              const message = `! ${err.message}`;
+              return {
+                ...prev,
+                status: "failed",
+                exitCode: prev.exitCode ?? -1,
+                finishedAt: prev.finishedAt ?? Date.now(),
+                notes: [...prev.notes, message],
+                lines: [
+                  ...prev.lines,
+                  { stream: "system", line: message, ts: new Date().toISOString() },
+                ],
+              };
+            });
+          },
+        })
+      );
     },
-    [teardown]
+    [updateTab]
+  );
+
+  const openTab = useCallback(
+    (jobId: string, projectId: string, action: string) => {
+      setTabs((prev) => {
+        if (prev.some((tab) => tab.jobId === jobId)) return prev;
+        const next = [...prev, createJobState(jobId, projectId, action)];
+        if (next.length <= MAX_TERMINAL_TABS) return next;
+        const removable = next.find((tab) => tab.finishedAt !== null) ?? next[0];
+        teardown(removable.jobId);
+        return next.filter((tab) => tab.jobId !== removable.jobId);
+      });
+      setActiveTabId(jobId);
+      ensureSubscription(jobId, projectId, action);
+    },
+    [ensureSubscription, teardown]
   );
 
   const start = useCallback(
@@ -175,43 +216,128 @@ export function ActiveJobProvider({ children }: { children: ReactNode }) {
       options?: { designName?: string; args?: string[] }
     ) => {
       const res = await startJob(projectId, action, options);
-      subscribe(res.job_id, projectId, action);
+      openTab(res.job_id, projectId, action);
       return res;
     },
-    [subscribe]
+    [openTab]
   );
 
   const attach = useCallback(
-    (jobId: string, projectId: string, action: string) => {
-      subscribe(jobId, projectId, action);
+    async (jobId: string, projectId: string, action: string) => {
+      try {
+        await openTerminalTab(jobId);
+      } catch {
+        // geçmiş job için sekme kaydı oluşturulamayabilir
+      }
+      openTab(jobId, projectId, action);
     },
-    [subscribe]
+    [openTab]
   );
 
-  const cancel = useCallback(async () => {
-    if (!active) return;
+  const setActiveTab = useCallback((jobId: string) => {
+    setActiveTabId(jobId);
+  }, []);
+
+  const cancel = useCallback(async (jobId?: string) => {
+    const targetId = jobId ?? activeTabId;
+    if (!targetId) return;
+    const target = tabsRef.current.find((tab) => tab.jobId === targetId);
+    if (!target || target.finishedAt) return;
     try {
-      await cancelJob(active.jobId);
+      await cancelJob(targetId);
+      updateTab(targetId, (prev) =>
+        !prev.finishedAt
+          ? {
+              ...prev,
+              status: "cancelled",
+              exitCode: 130,
+              finishedAt: Date.now(),
+            }
+          : prev
+      );
     } catch {
       // ignore
     }
-  }, [active]);
+  }, [activeTabId, updateTab]);
 
-  const clear = useCallback(() => {
-    teardown();
-    setActive(null);
-  }, [teardown]);
+  const closeTab = useCallback(
+    async (jobId: string) => {
+      teardown(jobId);
+      try {
+        await closeTerminalTab(jobId);
+      } catch {
+        // ignore
+      }
+      setTabs((prev) => {
+        const next = prev.filter((tab) => tab.jobId !== jobId);
+        setActiveTabId((current) => {
+          if (current !== jobId) return current;
+          const idx = prev.findIndex((tab) => tab.jobId === jobId);
+          const fallback = next[idx] ?? next[idx - 1];
+          return fallback?.jobId ?? null;
+        });
+        return next;
+      });
+    },
+    [teardown]
+  );
+
+  const clear = useCallback(async () => {
+    if (!activeTabId) return;
+    await closeTab(activeTabId);
+  }, [activeTabId, closeTab]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const remoteTabs = await listTerminalTabs(projectId);
+        if (cancelled) return;
+        for (const tab of remoteTabs) {
+          if (cancelled) break;
+          openTab(tab.job_id, tab.project_id, tab.action);
+        }
+      } catch {
+        // backend henüz sekmeleri sunmuyor olabilir
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Proje değişince sunucudaki açık sekmeleri bir kez yükle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   useEffect(() => {
     return () => {
-      subRef.current?.close();
-      subRef.current = null;
+      for (const sub of subsRef.current.values()) {
+        sub.close();
+      }
+      subsRef.current.clear();
     };
   }, []);
 
+  const active = useMemo(() => {
+    if (!activeTabId) return tabs[0] ?? null;
+    return tabs.find((tab) => tab.jobId === activeTabId) ?? tabs[0] ?? null;
+  }, [activeTabId, tabs]);
+
   const value = useMemo<ActiveJobContextValue>(
-    () => ({ active, start, attach, cancel, clear }),
-    [active, start, attach, cancel, clear]
+    () => ({
+      tabs,
+      activeTabId,
+      active,
+      setActiveTab,
+      start,
+      attach,
+      cancel,
+      closeTab,
+      clear,
+    }),
+    [tabs, activeTabId, active, setActiveTab, start, attach, cancel, closeTab, clear]
   );
 
   return <ActiveJobContext.Provider value={value}>{children}</ActiveJobContext.Provider>;

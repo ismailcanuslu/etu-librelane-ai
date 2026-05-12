@@ -61,32 +61,32 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
   "smoke-test": {
     icon: <Flame className="h-4 w-4" />,
     color: "text-orange-400",
-    infoText: "iverilog ile *.v dosyalarının elaborate olup olmadığını dener.",
+    infoText: "efabless/openlane imajında Yosys ile *.v dosyalarının okunup okunamadığını dener.",
   },
   lint: {
     icon: <ScanSearch className="h-4 w-4" />,
     color: "text-sky-400",
-    infoText: "Verilator ile statik analiz; uyarı/hata listesi üretir.",
+    infoText: "efabless/openlane imajında Yosys ile hiyerarşi ve okunabilirlik kontrolü.",
   },
   formal: {
     icon: <FlaskConical className="h-4 w-4" />,
     color: "text-violet-400",
-    infoText: "SymbiYosys gerektirir; runner image'ında henüz yok.",
+    infoText: "efabless/openlane imajında SymbiYosys (sby) bulunmuyor.",
   },
   simulation: {
     icon: <Play className="h-4 w-4" />,
     color: "text-sky-400 bg-sky-500/10 border-sky-500/20",
-    infoText: "tb_*.v dosyalarını derler ve vvp ile koşturur.",
+    infoText: "efabless/openlane imajında iverilog/vvp varsa tb_*.v ile simülasyon çalıştırır.",
   },
   synthesis: {
     icon: <Layers className="h-4 w-4" />,
     color: "text-violet-400 bg-violet-500/10 border-violet-500/20",
-    infoText: "Yosys synth pass'i ile *.v dosyalarını netlist'e çevirir. Çıktı: netlist.v.",
+    infoText: "efabless/openlane içindeki Yosys ile netlist.v üretir.",
   },
   verification: {
     icon: <CheckCircle2 className="h-4 w-4" />,
     color: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    infoText: "Verilator --lint + iverilog elaborate kombinasyonu.",
+    infoText: "efabless/openlane imajında Yosys ile hızlı RTL doğrulaması.",
   },
   pnr: {
     icon: <GitBranch className="h-4 w-4" />,
@@ -126,11 +126,11 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
 };
 
 const FALLBACK_TOOLS: ToolSpec[] = [
-  { id: "smoke-test", label: "Smoke Test", description: "Hızlı elaborate kontrolü.", image: "", group: "tools", badge: "Hızlı", enabled: true },
-  { id: "lint", label: "RTL Lint", description: "Verilator lint.", image: "", group: "tools", badge: null, enabled: true },
-  { id: "simulation", label: "Simülasyon", description: "iverilog + vvp", image: "", group: "build", badge: null, enabled: true },
-  { id: "synthesis", label: "Sentez", description: "Yosys sentez", image: "", group: "build", badge: null, enabled: true },
-  { id: "verification", label: "Doğrulama", description: "Lint + smoke", image: "", group: "build", badge: null, enabled: true },
+  { id: "smoke-test", label: "Smoke Test", description: "efabless/openlane içinde Yosys smoke.", image: "", group: "tools", badge: "Hızlı", enabled: true },
+  { id: "lint", label: "RTL Lint", description: "efabless/openlane içinde Yosys lint.", image: "", group: "tools", badge: null, enabled: true },
+  { id: "simulation", label: "Simülasyon", description: "efabless/openlane içinde iverilog/vvp.", image: "", group: "build", badge: null, enabled: true },
+  { id: "synthesis", label: "Sentez", description: "efabless/openlane içinde Yosys sentez.", image: "", group: "build", badge: null, enabled: true },
+  { id: "verification", label: "Doğrulama", description: "efabless/openlane içinde Yosys doğrulama.", image: "", group: "build", badge: null, enabled: true },
 ];
 
 function toActionCard(tool: ToolSpec): ActionCardSpec {
@@ -245,14 +245,19 @@ function ActionRow({
   layout: "card" | "list";
   toolEnabled: boolean;
 }) {
-  const { active, start } = useActiveJob();
+  const { tabs, active, start } = useActiveJob();
   const [openInfo, setOpenInfo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const isActiveHere = active?.action === spec.id && (active.status === "running" || active.status === "preparing" || active.status === "queued");
-  const otherRunning = active && !active.finishedAt && !isActiveHere;
-  const disabled = pending || isActiveHere || !!otherRunning || !toolEnabled || !projectId;
+  const runningCount = tabs.filter(
+    (tab) =>
+      tab.action === spec.id &&
+      !tab.finishedAt &&
+      (tab.status === "running" || tab.status === "preparing" || tab.status === "queued")
+  ).length;
+  const isActiveHere = runningCount > 0;
+  const disabled = pending || !toolEnabled || !projectId;
 
   async function handleRun() {
     if (!projectId) {
@@ -291,7 +296,7 @@ function ActionRow({
       {isActiveHere ? (
         <>
           <Loader2 className="h-2.5 w-2.5 animate-spin" />
-          Çalışıyor
+          {runningCount > 1 ? `${runningCount} çalışıyor` : "Çalışıyor"}
         </>
       ) : pending ? (
         <>
@@ -511,7 +516,7 @@ function AnalysisTab({
   onAskAI: (msg: string) => void;
   onOpenWorkspaceFile?: (key: string) => void;
 }) {
-  const { active, attach } = useActiveJob();
+  const { tabs, active, attach } = useActiveJob();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [jobsLoading, setJobsLoading] = useState(false);
@@ -552,9 +557,11 @@ function AnalysisTab({
   }, [loadJobs, active?.finishedAt]);
 
   const selectedJob = useMemo(() => jobs.find((j) => j.id === selectedId) ?? null, [jobs, selectedId]);
-  const isLiveSelectedJob = Boolean(
-    selectedJob && active && active.jobId === selectedJob.id && !active.finishedAt
+  const liveTab = useMemo(
+    () => (selectedJob ? tabs.find((tab) => tab.jobId === selectedJob.id) ?? null : null),
+    [selectedJob, tabs]
   );
+  const isLiveSelectedJob = Boolean(liveTab && !liveTab.finishedAt);
 
   useEffect(() => {
     setAiSummary(null);
@@ -619,8 +626,8 @@ function AnalysisTab({
 
   useEffect(() => {
     if (!selectedJob) return;
-    if (isLiveSelectedJob && active) {
-      const streamed = active.lines.map((line) => `[${line.stream}] ${line.line}`).join("\n");
+    if (isLiveSelectedJob && liveTab) {
+      const streamed = liveTab.lines.map((line) => `[${line.stream}] ${line.line}`).join("\n");
       setLogText(streamed);
       setLogLoading(false);
       setLogError(
@@ -651,7 +658,7 @@ function AnalysisTab({
     return () => {
       cancelled = true;
     };
-  }, [active, isLiveSelectedJob, selectedJob]);
+  }, [liveTab, isLiveSelectedJob, selectedJob]);
 
   const entries = useMemo(() => parseLogs(logText), [logText]);
   const errors = entries.filter((e) => e.level === "ERROR");
@@ -686,7 +693,7 @@ function AnalysisTab({
             {selectedJob && (
               <button
                 type="button"
-                onClick={() => attach(selectedJob.id, selectedJob.project_id, selectedJob.action)}
+                onClick={() => void attach(selectedJob.id, selectedJob.project_id, selectedJob.action)}
                 className="flex items-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-medium text-violet-300 hover:bg-violet-500/15"
                 title="Terminale yükle"
               >

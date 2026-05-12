@@ -103,15 +103,21 @@ function ChatWorkspaceLayout({
   agentOpen: boolean;
   setAgentOpen: (open: boolean) => void;
 }) {
-  const { active } = useActiveJob();
+  const { tabs, active } = useActiveJob();
   const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!active || active.finishedAt) return;
+    const hasLive = tabs.some(
+      (tab) =>
+        tab.projectId === activeProjectId &&
+        !tab.finishedAt &&
+        (tab.status === "running" || tab.status === "preparing" || tab.status === "queued")
+    );
+    if (!hasLive) return;
     setTerminalCollapsed(false);
-  }, [active?.jobId, active?.finishedAt]);
+  }, [activeProjectId, tabs]);
 
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
     if (!isTextFile(node.ext)) return;
@@ -212,6 +218,7 @@ function ChatWorkspaceLayout({
             )}
           >
             <WorkspaceTerminal
+              projectId={activeProjectId}
               collapsed={terminalCollapsed}
               onToggleCollapsed={() => setTerminalCollapsed((c) => !c)}
               onOpenWorkspaceFile={handleOpenWorkspaceFile}
@@ -265,7 +272,7 @@ export default function ChatPage() {
 
   return (
     <TooltipProvider>
-      <ActiveJobProvider>
+      <ActiveJobProvider projectId={activeProjectId}>
         <ChatWorkspaceLayout
           activeProjectId={activeProjectId}
           projects={projects}
