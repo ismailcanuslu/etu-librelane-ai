@@ -67,6 +67,10 @@ class AIChatSocketClient {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
+  waitUntilConnected(timeoutMs = 10_000): Promise<void> {
+    return this.waitForOpen(timeoutMs);
+  }
+
   sendChatMessage(message: string, history: ChatHistoryItem[]): Promise<string> {
     const id = newRequestId();
     return new Promise<string>((resolve, reject) => {

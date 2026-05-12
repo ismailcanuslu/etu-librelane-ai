@@ -36,11 +36,18 @@ export interface FileNode {
 
 export type Role = "user" | "assistant";
 
+export interface ChatAttachmentRef {
+  key: string;
+  name: string;
+  type: "file" | "dir";
+}
+
 export interface Message {
   id: string;
   role: Role;
   content: string;
   timestamp: string;
+  attachments?: ChatAttachmentRef[];
 }
 
 export interface Project {
@@ -73,6 +80,10 @@ export interface ToolSpec {
   group: string;
   badge: string | null;
   enabled: boolean;
+  kind?: "binary" | "probe" | "flow";
+  requires_verilog?: boolean;
+  requires_config?: boolean;
+  requires_pdk?: boolean;
 }
 
 export interface Job {

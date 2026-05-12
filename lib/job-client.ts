@@ -61,11 +61,24 @@ export async function listTools(): Promise<ToolSpec[]> {
   return data.tools ?? [];
 }
 
-export async function startJob(projectId: string, action: string): Promise<{ job_id: string }> {
+export async function startJob(
+  projectId: string,
+  action: string,
+  options?: { designName?: string; args?: string[] }
+): Promise<{ job_id: string }> {
+  const body: {
+    project_id: string;
+    action: string;
+    design_name?: string;
+    args?: string[];
+  } = { project_id: projectId, action };
+  if (options?.designName) body.design_name = options.designName;
+  if (options?.args?.length) body.args = options.args;
+
   const res = await fetch(`${RUN_BASE}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ project_id: projectId, action }),
+    body: JSON.stringify(body),
   });
   return asJsonOrThrow<{ job_id: string }>(res);
 }

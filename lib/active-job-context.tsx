@@ -32,7 +32,11 @@ export interface RunningJobState {
 interface ActiveJobContextValue {
   active: RunningJobState | null;
   /** Backend'e POST /run yapar, yeni job'a abone olur. Önceki job hâlâ izleniyorsa onu bırakır. */
-  start: (projectId: string, action: string) => Promise<{ job_id: string }>;
+  start: (
+    projectId: string,
+    action: string,
+    options?: { designName?: string; args?: string[] }
+  ) => Promise<{ job_id: string }>;
   /** Verili job'a (örn. geçmişten) sadece görüntüleme için bağlan — yeni job başlatmaz, snapshot+stream alır. */
   attach: (jobId: string, projectId: string, action: string) => void;
   /** Aktif job'u iptal etmeye çalışır. */
@@ -165,8 +169,12 @@ export function ActiveJobProvider({ children }: { children: ReactNode }) {
   );
 
   const start = useCallback(
-    async (projectId: string, action: string) => {
-      const res = await startJob(projectId, action);
+    async (
+      projectId: string,
+      action: string,
+      options?: { designName?: string; args?: string[] }
+    ) => {
+      const res = await startJob(projectId, action, options);
       subscribe(res.job_id, projectId, action);
       return res;
     },

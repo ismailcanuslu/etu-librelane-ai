@@ -2,16 +2,27 @@
 
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
-import type { Message } from "@/lib/types";
+import type { ChatAttachmentRef, Message } from "@/lib/types";
 
 interface ChatThreadProps {
   messages: Message[];
   projectName: string;
   isLoading: boolean;
-  onSend: (content: string) => void;
+  attachments: ChatAttachmentRef[];
+  onAddAttachment: (attachment: ChatAttachmentRef) => void;
+  onRemoveAttachment: (key: string) => void;
+  onSend: (content: string, attachments: ChatAttachmentRef[]) => void;
 }
 
-export default function ChatThread({ messages, projectName, isLoading, onSend }: ChatThreadProps) {
+export default function ChatThread({
+  messages,
+  projectName,
+  isLoading,
+  attachments,
+  onAddAttachment,
+  onRemoveAttachment,
+  onSend,
+}: ChatThreadProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <MessageList messages={messages} projectName={projectName} />
@@ -33,7 +44,13 @@ export default function ChatThread({ messages, projectName, isLoading, onSend }:
         </div>
       )}
 
-      <ChatInput onSend={onSend} isLoading={isLoading} />
+      <ChatInput
+        onSend={onSend}
+        isLoading={isLoading}
+        attachments={attachments}
+        onAddAttachment={onAddAttachment}
+        onRemoveAttachment={onRemoveAttachment}
+      />
     </div>
   );
 }

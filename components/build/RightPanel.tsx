@@ -49,11 +49,12 @@ interface ActionCardSpec {
   badge?: string;
 }
 
-const BUILD_FLOW_ORDER = ["synthesis", "verification", "simulation", "pnr", "gdsii"] as const;
+const BUILD_FLOW_ORDER = ["synthesis", "verification", "simulation", "openlane1-flow"] as const;
 
 const TOOL_GROUP_LABELS: Record<string, string> = {
   tools: "Test & Doğrulama",
   analysis: "Analiz & Raporlama",
+  openlane1: "OpenLane 1 Araçları",
 };
 
 const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText">> = {
@@ -91,6 +92,11 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
     icon: <GitBranch className="h-4 w-4" />,
     color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
     infoText: "OpenLane PnR akışı; config.json ve OpenLane runner image gerekir.",
+  },
+  "openlane1-flow": {
+    icon: <GitBranch className="h-4 w-4" />,
+    color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+    infoText: "OpenLane1 flow.tcl ile tam akış; proje adı design olarak kullanılır.",
   },
   gdsii: {
     icon: <Package className="h-4 w-4" />,
@@ -145,10 +151,15 @@ function sortBuildTools(tools: ToolSpec[]): ToolSpec[] {
   return [...tools].sort((a, b) => (order.get(a.id as (typeof BUILD_FLOW_ORDER)[number]) ?? 99) - (order.get(b.id as (typeof BUILD_FLOW_ORDER)[number]) ?? 99));
 }
 
-function groupCatalogTools(tools: ToolSpec[]): { label: string; items: ActionCardSpec[] }[] {
+function groupCatalogTools(tools: ToolSpec[], query = ""): { label: string; items: ActionCardSpec[] }[] {
+  const normalized = query.trim().toLowerCase();
   const grouped = new Map<string, ActionCardSpec[]>();
   for (const tool of tools) {
     if (tool.group === "build") continue;
+    if (normalized) {
+      const haystack = `${tool.id} ${tool.label} ${tool.description}`.toLowerCase();
+      if (!haystack.includes(normalized)) continue;
+    }
     const label = TOOL_GROUP_LABELS[tool.group] ?? tool.group;
     const items = grouped.get(label) ?? [];
     items.push(toActionCard(tool));
@@ -188,9 +199,8 @@ function useToolsCatalog() {
 
   const enabled = useMemo(() => new Set(tools.filter((tool) => tool.enabled).map((tool) => tool.id)), [tools]);
   const buildTools = useMemo(() => sortBuildTools(tools.filter((tool) => tool.group === "build")), [tools]);
-  const toolGroups = useMemo(() => groupCatalogTools(tools), [tools]);
 
-  return { tools, enabled, buildTools, toolGroups, catalogError, catalogLoading };
+  return { tools, enabled, buildTools, catalogError, catalogLoading };
 }
 
 function CatalogStatusBanner({
@@ -252,7 +262,8 @@ function ActionRow({
     setError(null);
     setPending(true);
     try {
-      await start(projectId, spec.id);
+      const runOptions = spec.id === "openlane1-flow" ? { designName: projectId } : undefined;
+      await start(projectId, spec.id, runOptions);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -409,7 +420,9 @@ function BuildTab({ projectName, projectId }: { projectName: string; projectId: 
 }
 
 function ToolsTab({ projectName, projectId }: { projectName: string; projectId: string }) {
-  const { enabled: enabledTools, toolGroups, catalogError, catalogLoading } = useToolsCatalog();
+  const { enabled: enabledTools, tools, catalogError, catalogLoading } = useToolsCatalog();
+  const [query, setQuery] = useState("");
+  const toolGroups = useMemo(() => groupCatalogTools(tools, query), [tools, query]);
 
   return (
     <div className="flex flex-col gap-3 p-4">
@@ -420,6 +433,13 @@ function ToolsTab({ projectName, projectId }: { projectName: string; projectId: 
           <span className="text-slate-300">{projectName}</span> — Araç Takımı
         </p>
       </div>
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="OpenLane1 araçlarında ara..."
+        className="w-full rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-slate-200 placeholder:text-slate-600 focus:border-violet-500/40 focus:outline-none"
+      />
       {toolGroups.map((group) => (
         <div key={group.label}>
           <p className="px-1 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-600">

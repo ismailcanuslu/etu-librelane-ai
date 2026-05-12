@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Cpu, User } from "lucide-react";
+import { Cpu, User, Folder, File } from "lucide-react";
 
 interface MessageListProps {
   messages: Message[];
@@ -119,6 +119,26 @@ export default function MessageList({ messages, projectName }: MessageListProps)
               : "rounded-tl-sm bg-white/5 border border-white/8 text-slate-200"
           )}>
             <MessageContent content={msg.content} />
+            {msg.attachments && msg.attachments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {msg.attachments.map((attachment) => (
+                  <span
+                    key={`${attachment.type}:${attachment.key}`}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
+                      msg.role === "user" ? "bg-white/10 text-violet-50" : "bg-white/5 text-slate-300"
+                    )}
+                  >
+                    {attachment.type === "dir" ? (
+                      <Folder className="h-3 w-3" />
+                    ) : (
+                      <File className="h-3 w-3" />
+                    )}
+                    {attachment.name}
+                  </span>
+                ))}
+              </div>
+            )}
             <p className={cn(
               "mt-1.5 text-[10px]",
               msg.role === "user" ? "text-violet-200/60 text-right" : "text-slate-600"

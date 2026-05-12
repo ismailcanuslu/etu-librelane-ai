@@ -1,11 +1,27 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PanelRightClose, MessageSquare, Zap, Wrench, ScanSearch } from "lucide-react";
+import {
+  PanelRightClose,
+  MessageSquare,
+  Zap,
+  Wrench,
+  ScanSearch,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+} from "lucide-react";
 import ChatThread from "@/components/chat/ChatThread";
 import { AgentWorkflowBody, type AgentWorkflowTab } from "@/components/build/RightPanel";
-import type { Message } from "@/lib/types";
-import { onLateChatReply, sendChatMessage, startChatTransport, stopChatTransport } from "@/lib/ai-client";
+import type { ChatAttachmentRef, Message } from "@/lib/types";
+import {
+  onLateChatReply,
+  sendChatMessage,
+  stopChatTransport,
+  connectAiAgent,
+  type AiAgentStatus,
+} from "@/lib/ai-client";
+import { buildMessageWithAttachments } from "@/lib/chat-attachments";
 import { getChatHistory, saveChatHistory } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -20,14 +36,44 @@ const TABS: { id: AgentPanelTab; label: string; icon: React.ReactNode }[] = [
 
 interface AgentPanelProps {
   projectId: string;
-  /**
-   * Backend tool runner'a iletilen workspace proje kimliği. Job'lar bu
-   * isimle saklanır; UI projeleri seçimi için projectId (lokal) kullanır.
-   */
   projectBucket: string;
   projectName: string;
   onClose: () => void;
   onOpenWorkspaceFile?: (key: string) => void;
+}
+
+function AgentConnectionBanner({ status }: { status: AiAgentStatus }) {
+  const isConnecting = status.phase === "connecting";
+  const isReady = status.phase === "ready";
+
+  return (
+    <div
+      className={cn(
+        "mx-3 mt-2 flex items-start gap-2 rounded-lg border px-3 py-2 text-[11px]",
+        isReady && "border-emerald-500/25 bg-emerald-500/10 text-emerald-200",
+        isConnecting && "border-violet-500/25 bg-violet-500/10 text-violet-200",
+        !isReady && !isConnecting && "border-rose-500/25 bg-rose-500/10 text-rose-200"
+      )}
+    >
+      {isConnecting ? (
+        <Loader2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 animate-spin" />
+      ) : isReady ? (
+        <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      ) : (
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+      )}
+      <div className="min-w-0">
+        <p className="font-medium">
+          {isConnecting
+            ? `AI asistanı ${status.model ?? "Gemma"} modeline bağlanıyor...`
+            : isReady
+              ? `AI asistanı ${status.model ?? "Gemma"} modeline bağlı`
+              : "Ajana bağlanılamadı"}
+        </p>
+        <p className="mt-0.5 text-[10px] opacity-90">{status.message}</p>
+      </div>
+    </div>
+  );
 }
 
 export default function AgentPanel({
@@ -41,13 +87,34 @@ export default function AgentPanel({
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingInput, setPendingInput] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<ChatAttachmentRef[]>([]);
+  const [agentStatus, setAgentStatus] = useState<AiAgentStatus>({
+    phase: "connecting",
+    message: "Ollama servisi kontrol ediliyor...",
+    model: "Gemma",
+  });
 
   useEffect(() => {
     setMessages(getChatHistory(projectId));
   }, [projectId]);
 
   useEffect(() => {
-    startChatTransport();
+    if (tab !== "chat") return;
+    let cancelled = false;
+    setAgentStatus({
+      phase: "connecting",
+      message: "Ollama servisi açılmaya çalışılıyor...",
+      model: "Gemma",
+    });
+    void connectAiAgent().then((status) => {
+      if (!cancelled) setAgentStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  useEffect(() => {
     return () => {
       stopChatTransport();
     };
@@ -72,12 +139,13 @@ export default function AgentPanel({
     };
   }, [projectId]);
 
-  async function handleSend(content: string) {
+  async function handleSend(content: string, nextAttachments: ChatAttachmentRef[]) {
     const userMsg: Message = {
       id: `msg-${Date.now()}-u`,
       role: "user",
       content,
       timestamp: new Date().toISOString(),
+      attachments: nextAttachments.length ? nextAttachments : undefined,
     };
     let historyForApi: Message[] = [];
     setMessages((prev) => {
@@ -86,11 +154,21 @@ export default function AgentPanel({
       saveChatHistory(projectId, withUser);
       return withUser;
     });
+    setAttachments([]);
     setIsLoading(true);
 
     try {
+      if (agentStatus.phase !== "ready") {
+        const refreshed = await connectAiAgent();
+        setAgentStatus(refreshed);
+        if (refreshed.phase !== "ready") {
+          throw new Error(refreshed.message);
+        }
+      }
+
+      const outbound = await buildMessageWithAttachments(projectBucket, content, nextAttachments);
       const reply = await sendChatMessage(
-        content,
+        outbound,
         historyForApi.slice(0, -1).map((msg) => ({ role: msg.role, content: msg.content }))
       );
       const assistantMsg: Message = {
@@ -125,7 +203,7 @@ export default function AgentPanel({
     if (pendingInput !== null && tab === "chat") {
       const msg = pendingInput;
       setPendingInput(null);
-      handleSend(msg);
+      void handleSend(msg, []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- tek seferlik pending mesaj
   }, [tab, pendingInput]);
@@ -133,6 +211,19 @@ export default function AgentPanel({
   function handleWorkflowAskAI(msg: string) {
     setTab("chat");
     setPendingInput(msg);
+  }
+
+  function addAttachment(attachment: ChatAttachmentRef) {
+    setAttachments((prev) => {
+      if (prev.some((item) => item.key === attachment.key && item.type === attachment.type)) {
+        return prev;
+      }
+      return [...prev, attachment];
+    });
+  }
+
+  function removeAttachment(key: string) {
+    setAttachments((prev) => prev.filter((item) => item.key !== key));
   }
 
   return (
@@ -175,12 +266,18 @@ export default function AgentPanel({
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {tab === "chat" ? (
-          <ChatThread
-            messages={messages}
-            projectName={projectName}
-            isLoading={isLoading}
-            onSend={handleSend}
-          />
+          <>
+            <AgentConnectionBanner status={agentStatus} />
+            <ChatThread
+              messages={messages}
+              projectName={projectName}
+              isLoading={isLoading}
+              attachments={attachments}
+              onAddAttachment={addAttachment}
+              onRemoveAttachment={removeAttachment}
+              onSend={(content, sentAttachments) => void handleSend(content, sentAttachments)}
+            />
+          </>
         ) : (
           <AgentWorkflowBody
             activeTab={tab}

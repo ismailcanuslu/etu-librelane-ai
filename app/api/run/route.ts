@@ -1,13 +1,23 @@
-// POST /api/run  body: { project_id, action } → backend POST /run
+// POST /api/run  body: { project_id, action, design_name?, args? } → backend POST /run
 
 import type { NextRequest } from "next/server";
 import { getFileServiceBase } from "@/lib/file-service";
 import { describeUpstreamFetchFailure } from "@/lib/upstream-fetch-error";
 
 export async function POST(request: NextRequest) {
-  let body: { project_id?: string; action?: string };
+  let body: {
+    project_id?: string;
+    action?: string;
+    design_name?: string;
+    args?: string[];
+  };
   try {
-    body = (await request.json()) as { project_id?: string; action?: string };
+    body = (await request.json()) as {
+      project_id?: string;
+      action?: string;
+      design_name?: string;
+      args?: string[];
+    };
   } catch {
     return Response.json({ error: "geçersiz JSON gövdesi" }, { status: 400 });
   }
@@ -18,13 +28,23 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "project_id ve action zorunlu" }, { status: 400 });
   }
 
+  const payload: {
+    project_id: string;
+    action: string;
+    design_name?: string;
+    args?: string[];
+  } = { project_id: projectId, action };
+  const designName = body.design_name?.trim();
+  if (designName) payload.design_name = designName;
+  if (Array.isArray(body.args) && body.args.length > 0) payload.args = body.args;
+
   const base = getFileServiceBase();
   const upstream = `${base}/run`;
   try {
     const res = await fetch(upstream, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ project_id: projectId, action }),
+      body: JSON.stringify(payload),
       cache: "no-store",
     });
     const data: unknown = await res.json().catch(() => ({}));

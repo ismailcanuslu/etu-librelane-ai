@@ -20,6 +20,7 @@ import type { FileNode } from "@/lib/types";
 import { buildFileTree, isTextFile } from "@/lib/types";
 import { FileAPI } from "@/lib/api";
 import { WORKSPACE_REFRESH_EVENT } from "@/lib/workspace-events";
+import { encodeWorkspaceAttachment, WORKSPACE_ATTACHMENT_MIME } from "@/lib/workspace-drag";
 
 export type { FileNode };
 
@@ -94,7 +95,7 @@ interface FileRowProps {
 }
 
 function FileRow({
-  node, depth, dragOverKey,
+  node, depth, bucket, dragOverKey,
   onRename, onDelete, onOpenFile, onNewFileIn,
   onDragStart, onDragOver, onDragLeave, onDrop,
 }: FileRowProps) {
@@ -105,7 +106,7 @@ function FileRow({
   return (
     <div>
       <div
-        draggable={!isDir}
+        draggable
         className={cn(
           "group flex items-center gap-1 rounded px-1 py-[3px] cursor-pointer select-none",
           "hover:bg-white/5 text-slate-300 text-xs",
@@ -120,10 +121,15 @@ function FileRow({
           if (!isDir) onOpenFile(node);
         }}
         onDragStart={(e) => {
-          if (isDir) return;
-          // setData is required by Chrome/Firefox for drag to activate
+          const attachment = encodeWorkspaceAttachment({
+            bucket,
+            key: node.key,
+            name: node.name,
+            type: isDir ? "dir" : "file",
+          });
+          e.dataTransfer.setData(WORKSPACE_ATTACHMENT_MIME, attachment);
           e.dataTransfer.setData("text/plain", node.key);
-          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.effectAllowed = "copyMove";
           onDragStart(node);
         }}
         onDragOver={(e) => {
@@ -204,7 +210,7 @@ function FileRow({
               key={child.key || child.name}
               node={child}
               depth={depth + 1}
-              bucket=""
+              bucket={bucket}
               dragOverKey={dragOverKey}
               onRename={onRename}
               onDelete={onDelete}
