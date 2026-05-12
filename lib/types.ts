@@ -9,14 +9,14 @@ export interface ObjectInfo {
 }
 
 export interface ListObjectsResponse {
-  bucket: string;
+  project: string;
   prefix: string;
   recursive: boolean;
   count: number;
   objects: ObjectInfo[];
 }
 
-export interface BucketInfo {
+export interface ProjectSummary {
   name: string;
   createdAt: string;
 }
@@ -148,7 +148,7 @@ export function isTextFile(ext?: string): boolean {
 
 /**
  * Convert a flat list of ObjectInfo into a nested FileNode tree.
- * Pass prefix="" when each project has its own bucket (no prefix stripping needed).
+ * Pass prefix="" when each project has its own folder (no prefix stripping needed).
  */
 export function buildFileTree(objects: ObjectInfo[], prefix: string): FileNode[] {
   const root: FileNode[] = [];

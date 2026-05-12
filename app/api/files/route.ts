@@ -1,5 +1,5 @@
-// GET  /api/buckets       → list workspace projects
-// POST /api/buckets       → create project (body: { name: string })
+// GET  /api/files       → list workspace projects
+// POST /api/files       → create project (body: { name: string })
 
 import type { NextRequest } from "next/server";
 import { upstreamProjectPath, upstreamProjectsPath } from "@/lib/file-service";
@@ -19,16 +19,14 @@ export async function GET() {
   try {
     const res = await fetch(upstream, { cache: "no-store" });
     const data = (await safeJson(res)) as {
-      buckets?: Array<{ name: string; createdAt: string }>;
       projects?: Array<{ name: string; createdAt: string }>;
       count?: number;
     };
-    const items = data.projects ?? data.buckets ?? [];
+    const projects = data.projects ?? [];
     return Response.json(
       {
-        count: data.count ?? items.length,
-        buckets: items,
-        projects: items,
+        count: data.count ?? projects.length,
+        projects,
       },
       { status: res.status }
     );

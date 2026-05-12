@@ -1,20 +1,20 @@
-// GET    /api/files/[bucket]/[...key]  — download / stream object
-// DELETE /api/files/[bucket]/[...key]  — delete object
+// GET    /api/files/[projectId]/[...key]  — download / stream object
+// DELETE /api/files/[projectId]/[...key]  — delete object
 
 import type { NextRequest } from "next/server";
 import { upstreamObjectsPath } from "@/lib/file-service";
 
-type Ctx = { params: Promise<{ bucket: string; key: string[] }> };
+type Ctx = { params: Promise<{ projectId: string; key: string[] }> };
 
-function upstreamUrl(bucket: string, key: string[]) {
-  return upstreamObjectsPath(bucket, key.join("/"));
+function upstreamUrl(projectId: string, key: string[]) {
+  return upstreamObjectsPath(projectId, key.join("/"));
 }
 
 export async function GET(_request: NextRequest, ctx: Ctx) {
-  const { bucket, key } = await ctx.params;
+  const { projectId, key } = await ctx.params;
 
   try {
-    const res = await fetch(upstreamUrl(bucket, key), { cache: "no-store" });
+    const res = await fetch(upstreamUrl(projectId, key), { cache: "no-store" });
 
     if (!res.ok) {
       const errText = await res.text();
@@ -43,10 +43,10 @@ export async function GET(_request: NextRequest, ctx: Ctx) {
 }
 
 export async function DELETE(_request: NextRequest, ctx: Ctx) {
-  const { bucket, key } = await ctx.params;
+  const { projectId, key } = await ctx.params;
 
   try {
-    const res = await fetch(upstreamUrl(bucket, key), {
+    const res = await fetch(upstreamUrl(projectId, key), {
       method: "DELETE",
       cache: "no-store",
     });

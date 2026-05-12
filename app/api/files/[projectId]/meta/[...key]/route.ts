@@ -1,13 +1,13 @@
-// GET /api/files/[bucket]/meta/[...key]  — object metadata
+// GET /api/files/[projectId]/meta/[...key]  — object metadata
 
 import type { NextRequest } from "next/server";
 import { upstreamObjectsMetaPath } from "@/lib/file-service";
 
-type Ctx = { params: Promise<{ bucket: string; key: string[] }> };
+type Ctx = { params: Promise<{ projectId: string; key: string[] }> };
 
 export async function GET(_request: NextRequest, ctx: Ctx) {
-  const { bucket, key } = await ctx.params;
-  const upstream = upstreamObjectsMetaPath(bucket, key.join("/"));
+  const { projectId, key } = await ctx.params;
+  const upstream = upstreamObjectsMetaPath(projectId, key.join("/"));
 
   try {
     const res = await fetch(upstream, { cache: "no-store" });

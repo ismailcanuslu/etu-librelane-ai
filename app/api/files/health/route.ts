@@ -1,7 +1,7 @@
 import { getFileServiceBase } from "@/lib/file-service";
 
 /**
- * Upstream `GET /health`. Gateway tabanı verilmişse gateway health'ine gider.
+ * Upstream `GET /health` — FastAPI backend sağlık ucu.
  */
 export async function GET() {
   try {
@@ -16,7 +16,7 @@ export async function GET() {
     return Response.json(data as object, { status: res.status });
   } catch (err) {
     return Response.json(
-      { error: String(err), hint: "WORKSPACE_BACKEND ve gateway/backend servisinin ayakta olduğundan emin olun" },
+      { error: String(err), hint: "WORKSPACE_BACKEND ve Python backend servisinin ayakta olduğundan emin olun" },
       { status: 502 }
     );
   }

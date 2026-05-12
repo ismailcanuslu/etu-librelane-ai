@@ -29,7 +29,7 @@ import {
 } from "@/lib/store";
 import type { Project, FileNode } from "@/lib/types";
 import { toBucketName } from "@/lib/types";
-import { BucketAPI } from "@/lib/api";
+import { FileAPI } from "@/lib/api";
 import FileBrowser from "./FileBrowser";
 
 const AI_PROVIDERS = [
@@ -167,20 +167,20 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
   async function loadProjectsFromWorkspace() {
     setLoadingProjects(true);
     try {
-      const buckets = await BucketAPI.list();
+      const projectsOnDisk = await FileAPI.listProjects();
       const stored = getProjects();
-      const workspaceNames = new Set(buckets.map((b) => b.name));
+      const workspaceNames = new Set(projectsOnDisk.map((project) => project.name));
 
       const surviving = stored.filter((p) => workspaceNames.has(p.bucket));
       const survivingBuckets = new Set(surviving.map((p) => p.bucket));
 
-      const newFromWorkspace: Project[] = buckets
-        .filter((b) => !survivingBuckets.has(b.name))
-        .map((b) => ({
-          id: `proj-${b.name}`,
-          name: bucketToDisplayName(b.name),
-          bucket: b.name,
-          createdAt: b.createdAt,
+      const newFromWorkspace: Project[] = projectsOnDisk
+        .filter((project) => !survivingBuckets.has(project.name))
+        .map((project) => ({
+          id: `proj-${project.name}`,
+          name: bucketToDisplayName(project.name),
+          bucket: project.name,
+          createdAt: project.createdAt,
         }));
 
       const merged = [...surviving, ...newFromWorkspace];
@@ -221,7 +221,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
     setCreating(true);
     setCreateError(null);
     try {
-      await BucketAPI.create(bucket);
+      await FileAPI.createProject(bucket);
       // Optimistically add to local list, then sync from workspace
       const newProject: Project = {
         id: `proj-${Date.now()}`,
@@ -236,7 +236,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
       saveActiveProjectId(newProject.id);
       setNewProjectName("");
       setShowNewProject(false);
-      // Background sync to pick up any other buckets created externally
+      // Background sync to pick up any other projects created externally
       loadProjectsFromWorkspace();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -249,7 +249,7 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile }
     if (!deleteTarget || deleting) return;
     setDeleting(true);
     try {
-      await BucketAPI.remove(deleteTarget.bucket);
+      await FileAPI.deleteProject(deleteTarget.bucket);
     } catch {
       // bucket might not exist yet — proceed with local removal
     }

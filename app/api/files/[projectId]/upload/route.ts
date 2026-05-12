@@ -1,12 +1,12 @@
-// POST /api/files/[bucket]/upload?key=<objectKey>  — upload file to project
+// POST /api/files/[projectId]/upload?key=<objectKey>  — upload file to project
 
 import type { NextRequest } from "next/server";
 import { upstreamObjectsPath } from "@/lib/file-service";
 
-type Ctx = { params: Promise<{ bucket: string }> };
+type Ctx = { params: Promise<{ projectId: string }> };
 
 export async function POST(request: NextRequest, ctx: Ctx) {
-  const { bucket } = await ctx.params;
+  const { projectId } = await ctx.params;
   const key = request.nextUrl.searchParams.get("key");
 
   if (!key) {
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, ctx: Ctx) {
     request.headers.get("content-type") ??
     "application/octet-stream";
 
-  const upstream = upstreamObjectsPath(bucket, key);
+  const upstream = upstreamObjectsPath(projectId, key);
 
   try {
     const body = await request.arrayBuffer();
