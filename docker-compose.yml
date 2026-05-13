@@ -20,7 +20,7 @@ services:
     env_file:
       - .env
     environment:
-      WORKSPACE_BACKEND: http://librelane-backend:8001
+      WORKSPACE_BACKEND: http://host.docker.internal:8001
       NEXT_PUBLIC_WORKSPACE_BACKEND: http://127.0.0.1:8001
     networks:
       - librelane-network

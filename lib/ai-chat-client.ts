@@ -1,5 +1,7 @@
 "use client";
 
+import { backendWebSocketUrl } from "./backend-ws";
+
 type ChatRole = "user" | "assistant";
 
 export type ChatHistoryItem = { role: ChatRole; content: string };
@@ -24,9 +26,7 @@ const PING_MS = 25_000;
 function chatWebSocketUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_CHAT_WS_URL?.trim();
   if (fromEnv) return fromEnv;
-  if (typeof window === "undefined") return "";
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/api/ai/chat/ws`;
+  return backendWebSocketUrl("/ai/chat/ws");
 }
 
 function newRequestId(): string {

@@ -60,27 +60,28 @@ export async function sendChatMessage(
 }
 
 function displayModelName(model?: string): string {
-  if (!model) return "Gemma";
-  const lower = model.toLowerCase();
-  if (lower.includes("gemma")) return "Gemma";
-  return model;
+  if (!model?.trim()) return "Ollama";
+  return model.trim();
 }
 
 export async function connectAiAgent(): Promise<AiAgentStatus> {
-  const modelLabel = displayModelName(process.env.NEXT_PUBLIC_OLLAMA_MODEL);
+  const fallbackLabel = "Ollama";
   try {
-    const res = await fetch("/api/ai/status", { cache: "no-store" });
+    const res = await fetch("/api/ai/status", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       return {
         phase: "failed",
         message: `Ajana bağlanılamadı: ${await readErrorMessage(data, res.status)}`,
-        model: modelLabel,
+        model: fallbackLabel,
       };
     }
 
     const status = data as { ready?: boolean; message?: string; model?: string };
-    const resolvedModel = displayModelName(status.model) || modelLabel;
+    const resolvedModel = displayModelName(status.model) || fallbackLabel;
     if (!status.ready) {
       return {
         phase: "failed",
@@ -90,7 +91,7 @@ export async function connectAiAgent(): Promise<AiAgentStatus> {
     }
 
     startChatTransport();
-    await aiChatSocket.waitUntilConnected();
+    await aiChatSocket.waitUntilConnected(15_000);
     return {
       phase: "ready",
       message: `AI asistanı ${resolvedModel} modeline bağlı.`,
@@ -100,7 +101,7 @@ export async function connectAiAgent(): Promise<AiAgentStatus> {
     return {
       phase: "failed",
       message: `Ajana bağlanılamadı: ${error instanceof Error ? error.message : String(error)}`,
-      model: modelLabel,
+      model: fallbackLabel,
     };
   }
 }

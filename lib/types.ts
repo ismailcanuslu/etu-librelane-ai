@@ -60,7 +60,13 @@ export interface Project {
 
 // ─── Editor ──────────────────────────────────────────────────────────────────
 
+export const OLLAMA_SETTINGS_TAB_KEY = "__ollama_settings__";
+
+export type EditorTabKind = "file" | "ollama-settings";
+
 export interface FileTab {
+  /** Dosya dışı sekmeler (ör. Ollama ayarları). */
+  kind?: EditorTabKind;
   key: string;
   bucket: string;
   name: string;

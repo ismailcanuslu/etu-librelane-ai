@@ -22,7 +22,7 @@ import {
   type AiAgentStatus,
 } from "@/lib/ai-client";
 import { buildMessageWithAttachments } from "@/lib/chat-attachments";
-import { getChatHistory, saveChatHistory } from "@/lib/store";
+import { fetchChatHistory, putChatHistory } from "@/lib/chat-history-api";
 import { cn } from "@/lib/utils";
 
 type AgentPanelTab = "chat" | AgentWorkflowTab;
@@ -65,9 +65,9 @@ function AgentConnectionBanner({ status }: { status: AiAgentStatus }) {
       <div className="min-w-0">
         <p className="font-medium">
           {isConnecting
-            ? `AI asistanı ${status.model ?? "Gemma"} modeline bağlanıyor...`
+            ? `AI asistanı ${status.model ?? "Ollama"} modeline bağlanıyor...`
             : isReady
-              ? `AI asistanı ${status.model ?? "Gemma"} modeline bağlı`
+              ? `AI asistanı ${status.model ?? "Ollama"} modeline bağlı`
               : "Ajana bağlanılamadı"}
         </p>
         <p className="mt-0.5 text-[10px] opacity-90">{status.message}</p>
@@ -91,11 +91,22 @@ export default function AgentPanel({
   const [agentStatus, setAgentStatus] = useState<AiAgentStatus>({
     phase: "connecting",
     message: "Ollama servisi kontrol ediliyor...",
-    model: "Gemma",
+    model: "Ollama",
   });
 
   useEffect(() => {
-    setMessages(getChatHistory(projectId));
+    let cancelled = false;
+    setMessages([]);
+    void fetchChatHistory(projectId)
+      .then((rows) => {
+        if (!cancelled) setMessages(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [projectId]);
 
   useEffect(() => {
@@ -104,7 +115,7 @@ export default function AgentPanel({
     setAgentStatus({
       phase: "connecting",
       message: "Ollama servisi açılmaya çalışılıyor...",
-      model: "Gemma",
+      model: "Ollama",
     });
     void connectAiAgent().then((status) => {
       if (!cancelled) setAgentStatus(status);
@@ -130,7 +141,7 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        saveChatHistory(projectId, withReply);
+        void putChatHistory(projectId, withReply).catch(() => {});
         return withReply;
       });
     });
@@ -151,7 +162,7 @@ export default function AgentPanel({
     setMessages((prev) => {
       const withUser = [...prev, userMsg];
       historyForApi = withUser;
-      saveChatHistory(projectId, withUser);
+      void putChatHistory(projectId, withUser).catch(() => {});
       return withUser;
     });
     setAttachments([]);
@@ -179,7 +190,7 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        saveChatHistory(projectId, withReply);
+        void putChatHistory(projectId, withReply).catch(() => {});
         return withReply;
       });
     } catch (error) {
@@ -191,7 +202,7 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        saveChatHistory(projectId, withReply);
+        void putChatHistory(projectId, withReply).catch(() => {});
         return withReply;
       });
     } finally {

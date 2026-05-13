@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { PanelRightOpen, FileCode2 } from "lucide-react";
 import Sidebar from "@/components/sidebar/Sidebar";
 import FileEditorTabs from "@/components/editor/FileEditorTabs";
+import OllamaSettingsEditor from "@/components/settings/OllamaSettingsEditor";
 import AgentPanel from "@/components/workspace/AgentPanel";
 import WorkspaceTerminal from "@/components/workspace/WorkspaceTerminal";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -15,7 +16,7 @@ import {
   saveActiveProjectId,
 } from "@/lib/store";
 import type { Project, FileTab, FileNode } from "@/lib/types";
-import { isTextFile } from "@/lib/types";
+import { isTextFile, OLLAMA_SETTINGS_TAB_KEY } from "@/lib/types";
 
 interface EditorTabBarProps {
   fileTabs: FileTab[];
@@ -103,7 +104,7 @@ function ChatWorkspaceLayout({
   agentOpen: boolean;
   setAgentOpen: (open: boolean) => void;
 }) {
-  const { tabs, active } = useActiveJob();
+  const { tabs } = useActiveJob();
   const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
@@ -118,6 +119,24 @@ function ChatWorkspaceLayout({
     if (!hasLive) return;
     setTerminalCollapsed(false);
   }, [activeProjectId, tabs]);
+
+  const handleOpenOllamaSettings = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.key === OLLAMA_SETTINGS_TAB_KEY)) return prev;
+      return [
+        ...prev,
+        {
+          kind: "ollama-settings",
+          key: OLLAMA_SETTINGS_TAB_KEY,
+          bucket: "",
+          name: "Ollama ayarları",
+          content: "",
+          dirty: false,
+        },
+      ];
+    });
+    setActiveFileKey(OLLAMA_SETTINGS_TAB_KEY);
+  }, []);
 
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
     if (!isTextFile(node.ext)) return;
@@ -151,6 +170,11 @@ function ChatWorkspaceLayout({
 
   const handleTabClose = useCallback((key: string) => {
     setFileTabs((prev) => {
+      const tab = prev.find((t) => t.key === key);
+      if (tab?.dirty && tab.kind === "ollama-settings") {
+        const ok = window.confirm("Kaydedilmemiş Ollama ayarları var. Sekmeyi kapatmak istiyor musunuz?");
+        if (!ok) return prev;
+      }
       const idx = prev.findIndex((t) => t.key === key);
       const next = prev.filter((t) => t.key !== key);
       setActiveFileKey((ak) => {
@@ -167,6 +191,7 @@ function ChatWorkspaceLayout({
   }, []);
 
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
+  const activeTab = fileTabs.find((t) => t.key === activeFileKey);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
@@ -174,6 +199,7 @@ function ChatWorkspaceLayout({
         activeProjectId={activeProjectId}
         onProjectChange={onProjectChange}
         onOpenFile={handleOpenFile}
+        onOpenOllamaSettings={handleOpenOllamaSettings}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -198,14 +224,20 @@ function ChatWorkspaceLayout({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {fileTabs.length > 0 && activeFileKey ? (
-              <FileEditorTabs
-                tabs={fileTabs}
-                activeKey={activeFileKey}
-                onTabChange={setActiveFileKey}
-                onTabClose={handleTabClose}
-                onTabUpdate={handleTabUpdate}
-                showTabBar={false}
-              />
+              activeTab?.kind === "ollama-settings" ? (
+                <OllamaSettingsEditor
+                  onDirtyChange={(dirty) => handleTabUpdate(OLLAMA_SETTINGS_TAB_KEY, { dirty })}
+                />
+              ) : (
+                <FileEditorTabs
+                  tabs={fileTabs.filter((t) => t.kind !== "ollama-settings")}
+                  activeKey={activeFileKey}
+                  onTabChange={setActiveFileKey}
+                  onTabClose={handleTabClose}
+                  onTabUpdate={handleTabUpdate}
+                  showTabBar={false}
+                />
+              )
             ) : (
               <EmptyEditor />
             )}
