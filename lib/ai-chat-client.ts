@@ -6,19 +6,25 @@ type ChatRole = "user" | "assistant";
 
 export type ChatHistoryItem = { role: ChatRole; content: string };
 
+export type ChatReplyPayload = { reply: string; thinking?: string };
+
+export type StreamPartialPayload = { thinking?: string; content?: string };
+
 type ServerMessage =
   | { type: "connected" }
   | { type: "pong" }
   | { type: "status"; id: string; status: string; replay?: boolean }
-  | { type: "reply"; id: string; reply: string; replay?: boolean }
+  | { type: "stream_partial"; id: string; thinking?: string; content?: string }
+  | { type: "reply"; id: string; reply: string; thinking?: string; replay?: boolean }
   | { type: "error"; id?: string; message: string; replay?: boolean };
 
 type PendingRequest = {
-  resolve: (reply: string) => void;
+  resolve: (value: ChatReplyPayload) => void;
   reject: (error: Error) => void;
+  onPartial?: (value: StreamPartialPayload) => void;
 };
 
-type LateReplyHandler = (payload: { id: string; reply: string; replay: boolean }) => void;
+type LateReplyHandler = (payload: { id: string; reply: string; thinking?: string; replay: boolean }) => void;
 
 const RECONNECT_MS = 1000;
 const PING_MS = 25_000;
@@ -71,10 +77,14 @@ class AIChatSocketClient {
     return this.waitForOpen(timeoutMs);
   }
 
-  sendChatMessage(message: string, history: ChatHistoryItem[]): Promise<string> {
+  sendChatMessage(
+    message: string,
+    history: ChatHistoryItem[],
+    opts?: { onPartial?: (value: StreamPartialPayload) => void }
+  ): Promise<ChatReplyPayload> {
     const id = newRequestId();
-    return new Promise<string>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+    return new Promise<ChatReplyPayload>((resolve, reject) => {
+      this.pending.set(id, { resolve, reject, onPartial: opts?.onPartial });
       void this.sendPayload({ type: "chat", id, message, history }).catch((error) => {
         this.pending.delete(id);
         reject(error instanceof Error ? error : new Error(String(error)));
@@ -203,6 +213,18 @@ class AIChatSocketClient {
 
     if (payload.type === "status") return;
 
+    if (payload.type === "stream_partial") {
+      const pending = this.pending.get(payload.id);
+      if (!pending?.onPartial) return;
+      const partial: StreamPartialPayload = {};
+      if (typeof payload.thinking === "string") partial.thinking = payload.thinking;
+      if (typeof payload.content === "string") partial.content = payload.content;
+      if (partial.thinking !== undefined || partial.content !== undefined) {
+        pending.onPartial(partial);
+      }
+      return;
+    }
+
     if (payload.type === "error") {
       if (payload.id) {
         this.finishRequest(payload.id, undefined, new Error(payload.message));
@@ -219,20 +241,29 @@ class AIChatSocketClient {
       }
       this.seenReplyIds.add(payload.id);
 
-      const handled = this.finishRequest(payload.id, payload.reply, undefined);
+      const handled = this.finishRequest(payload.id, { reply: payload.reply, thinking: payload.thinking }, undefined);
       if (!handled) {
-        this.lateReplyHandler?.({ id: payload.id, reply: payload.reply, replay });
+        this.lateReplyHandler?.({
+          id: payload.id,
+          reply: payload.reply,
+          thinking: payload.thinking,
+          replay,
+        });
       }
       this.ack(payload.id);
     }
   }
 
-  private finishRequest(id: string, reply: string | undefined, error: Error | undefined): boolean {
+  private finishRequest(
+    id: string,
+    payload: ChatReplyPayload | undefined,
+    error: Error | undefined
+  ): boolean {
     const pending = this.pending.get(id);
     if (!pending) return false;
     this.pending.delete(id);
     if (error) pending.reject(error);
-    else pending.resolve(reply ?? "");
+    else pending.resolve(payload ?? { reply: "" });
     return true;
   }
 

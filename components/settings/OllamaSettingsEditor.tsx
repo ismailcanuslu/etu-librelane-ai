@@ -23,6 +23,8 @@ function stableStringify(c: OllamaConfigPayload): string {
 }
 
 export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEditorProps) {
+  const onDirtyRef = useRef(onDirtyChange);
+  onDirtyRef.current = onDirtyChange;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +44,10 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
     ready_timeout_seconds: 60,
   });
 
-  const markDirty = useCallback(
-    (next: OllamaConfigPayload) => {
-      const dirty = stableStringify(next) !== baselineRef.current;
-      onDirtyChange(dirty);
-    },
-    [onDirtyChange]
-  );
+  const markDirty = useCallback((next: OllamaConfigPayload) => {
+    const dirty = stableStringify(next) !== baselineRef.current;
+    onDirtyRef.current(dirty);
+  }, []);
 
   const loadConfig = useCallback(async () => {
     setError(null);
@@ -104,7 +103,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
         if (cancelled) return;
         setForm(next);
         baselineRef.current = stableStringify(next);
-        onDirtyChange(false);
+        onDirtyRef.current(false);
         await loadModels();
         await loadPs();
       } catch (e) {
@@ -116,7 +115,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
     return () => {
       cancelled = true;
     };
-  }, [loadConfig, loadModels, loadPs, onDirtyChange]);
+  }, [loadConfig, loadModels, loadPs]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -143,7 +142,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
       };
       setForm(next);
       baselineRef.current = stableStringify(next);
-      onDirtyChange(false);
+      onDirtyRef.current(false);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 2000);
       void loadModels();
@@ -153,7 +152,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
     } finally {
       setSaving(false);
     }
-  }, [form, loadModels, loadPs, onDirtyChange]);
+  }, [form, loadModels, loadPs]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

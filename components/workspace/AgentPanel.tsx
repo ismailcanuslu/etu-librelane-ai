@@ -88,6 +88,7 @@ export default function AgentPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ChatAttachmentRef[]>([]);
+  const [streamPreview, setStreamPreview] = useState<{ thinking?: string; content?: string } | null>(null);
   const [agentStatus, setAgentStatus] = useState<AiAgentStatus>({
     phase: "connecting",
     message: "Ollama servisi kontrol ediliyor...",
@@ -132,12 +133,13 @@ export default function AgentPanel({
   }, []);
 
   useEffect(() => {
-    onLateChatReply(({ reply }) => {
+    onLateChatReply(({ reply, thinking }) => {
       const assistantMsg: Message = {
         id: `msg-${Date.now()}-a`,
         role: "assistant",
         content: reply,
         timestamp: new Date().toISOString(),
+        ...(thinking ? { thinking } : {}),
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
@@ -166,6 +168,7 @@ export default function AgentPanel({
       return withUser;
     });
     setAttachments([]);
+    setStreamPreview(null);
     setIsLoading(true);
 
     try {
@@ -178,15 +181,21 @@ export default function AgentPanel({
       }
 
       const outbound = await buildMessageWithAttachments(projectBucket, content, nextAttachments);
-      const reply = await sendChatMessage(
+      const { reply: replyText, thinking } = await sendChatMessage(
         outbound,
-        historyForApi.slice(0, -1).map((msg) => ({ role: msg.role, content: msg.content }))
+        historyForApi.slice(0, -1).map((msg) => ({ role: msg.role, content: msg.content })),
+        {
+          onPartial: (p) => {
+            setStreamPreview((prev) => ({ ...prev, ...p }));
+          },
+        }
       );
       const assistantMsg: Message = {
         id: `msg-${Date.now()}-a`,
         role: "assistant",
-        content: reply,
+        content: replyText,
         timestamp: new Date().toISOString(),
+        ...(thinking ? { thinking } : {}),
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
@@ -206,6 +215,7 @@ export default function AgentPanel({
         return withReply;
       });
     } finally {
+      setStreamPreview(null);
       setIsLoading(false);
     }
   }
@@ -283,6 +293,7 @@ export default function AgentPanel({
               messages={messages}
               projectName={projectName}
               isLoading={isLoading}
+              streamPreview={streamPreview}
               attachments={attachments}
               onAddAttachment={addAttachment}
               onRemoveAttachment={removeAttachment}

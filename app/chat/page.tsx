@@ -190,6 +190,10 @@ function ChatWorkspaceLayout({
     setFileTabs((prev) => prev.map((t) => (t.key === key ? { ...t, ...patch } : t)));
   }, []);
 
+  const handleOllamaDirtyChange = useCallback((dirty: boolean) => {
+    handleTabUpdate(OLLAMA_SETTINGS_TAB_KEY, { dirty });
+  }, [handleTabUpdate]);
+
   const activeProject = projects.find((p) => p.id === activeProjectId) ?? projects[0];
   const activeTab = fileTabs.find((t) => t.key === activeFileKey);
 
@@ -225,9 +229,7 @@ function ChatWorkspaceLayout({
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             {fileTabs.length > 0 && activeFileKey ? (
               activeTab?.kind === "ollama-settings" ? (
-                <OllamaSettingsEditor
-                  onDirtyChange={(dirty) => handleTabUpdate(OLLAMA_SETTINGS_TAB_KEY, { dirty })}
-                />
+                <OllamaSettingsEditor onDirtyChange={handleOllamaDirtyChange} />
               ) : (
                 <FileEditorTabs
                   tabs={fileTabs.filter((t) => t.kind !== "ollama-settings")}

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Cpu, User, Folder, File } from "lucide-react";
+import { Brain, ChevronDown, Cpu, User, Folder, File } from "lucide-react";
 
 interface MessageListProps {
   messages: Message[];
@@ -23,6 +23,54 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
         </div>
       )}
       <pre className="overflow-x-auto p-3 text-xs text-slate-300 leading-relaxed font-mono">{code}</pre>
+    </div>
+  );
+}
+
+export function ThinkingBlock({
+  text,
+  live,
+  defaultOpen = true,
+}: {
+  text: string;
+  live?: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const preview = text.trim().slice(0, 160).replace(/\s+/g, " ");
+  const needsTruncate = text.trim().length > 160;
+  return (
+    <div className="mb-2 overflow-hidden rounded-lg border border-violet-500/30 bg-violet-950/40">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[11px] text-violet-100 transition-colors hover:bg-violet-500/15"
+      >
+        <Brain className="h-3.5 w-3.5 flex-shrink-0 text-violet-300" />
+        <span className="min-w-0 flex-1 font-medium">
+          {live ? "Canlı model düşüncesi" : "Model düşüncesi"}
+        </span>
+        <span className="hidden flex-shrink-0 text-[10px] text-violet-300/70 sm:inline">
+          {open ? "Daralt" : "Genişlet"}
+        </span>
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 flex-shrink-0 text-violet-300 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {!open && (
+        <p className="border-t border-violet-500/20 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
+          {preview}
+          {needsTruncate ? "…" : ""}
+        </p>
+      )}
+      {open && (
+        <pre
+          className="max-h-[min(70vh,28rem)] overflow-auto border-t border-violet-500/25 px-3 py-3 font-sans text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap [scrollbar-color:rgba(139,92,246,0.5)_transparent]"
+          title="Düşünce metni"
+        >
+          {text}
+        </pre>
+      )}
     </div>
   );
 }
@@ -118,7 +166,10 @@ export default function MessageList({ messages, projectName }: MessageListProps)
               ? "rounded-tr-sm bg-violet-600 text-white"
               : "rounded-tl-sm bg-white/5 border border-white/8 text-slate-200"
           )}>
-            <MessageContent content={msg.content} />
+            {msg.role === "assistant" && msg.thinking?.trim() ? (
+              <ThinkingBlock text={msg.thinking} />
+            ) : null}
+            {msg.content.trim() ? <MessageContent content={msg.content} /> : null}
             {msg.attachments && msg.attachments.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {msg.attachments.map((attachment) => (

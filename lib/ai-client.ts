@@ -1,4 +1,6 @@
-import { aiChatSocket } from "./ai-chat-client";
+import { aiChatSocket, type ChatReplyPayload, type StreamPartialPayload } from "./ai-chat-client";
+
+export type { StreamPartialPayload as ChatStreamPartialPayload } from "./ai-chat-client";
 
 export type AiAgentPhase = "connecting" | "ready" | "failed";
 
@@ -47,16 +49,17 @@ export function stopChatTransport(): void {
 }
 
 export function onLateChatReply(
-  handler: ((payload: { id: string; reply: string; replay: boolean }) => void) | null
+  handler: ((payload: { id: string; reply: string; thinking?: string; replay: boolean }) => void) | null
 ): void {
   aiChatSocket.onLateReply(handler);
 }
 
 export async function sendChatMessage(
   message: string,
-  history: { role: "user" | "assistant"; content: string }[]
-): Promise<string> {
-  return aiChatSocket.sendChatMessage(message, history);
+  history: { role: "user" | "assistant"; content: string }[],
+  opts?: { onPartial?: (value: StreamPartialPayload) => void }
+): Promise<ChatReplyPayload> {
+  return aiChatSocket.sendChatMessage(message, history, opts);
 }
 
 function displayModelName(model?: string): string {

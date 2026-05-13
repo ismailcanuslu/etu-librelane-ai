@@ -48,6 +48,8 @@ export interface Message {
   content: string;
   timestamp: string;
   attachments?: ChatAttachmentRef[];
+  /** Ollama / bazı modellerin iç düşünce metni (UI’da daraltılabilir blok). */
+  thinking?: string;
 }
 
 export interface Project {
