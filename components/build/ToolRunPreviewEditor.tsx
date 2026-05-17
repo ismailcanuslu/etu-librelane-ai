@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
 } from "lucide-react";
+import { OPENLANE_PLACEMENT_PRESET_IDS } from "@/lib/build-flow";
 import { cn } from "@/lib/utils";
 import { FileAPI } from "@/lib/api";
 import { useActiveJob } from "@/lib/active-job-context";
@@ -366,6 +367,7 @@ export default function ToolRunPreviewEditor({
             stages={flowStages}
             defaultIds={flowDefaultIds}
             selected={selectedFlowSteps}
+            placementPresetIds={[...OPENLANE_PLACEMENT_PRESET_IDS]}
             onChange={updateFlowSteps}
             disabled={locked}
           />

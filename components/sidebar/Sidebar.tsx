@@ -31,6 +31,7 @@ interface SidebarProps {
   onProjectChange: (id: string) => void;
   onOpenFile: (node: FileNode, bucket: string) => void;
   onOpenOllamaSettings: () => void;
+  onOpenSystemMetrics: () => void;
 }
 
 interface CollapsibleSectionProps {
@@ -126,6 +127,7 @@ export default function Sidebar({
   onProjectChange,
   onOpenFile,
   onOpenOllamaSettings,
+  onOpenSystemMetrics,
 }: SidebarProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
@@ -401,7 +403,7 @@ export default function Sidebar({
           )}
 
           <CollapsibleSection title="Ayarlar" icon={<Settings2 className="h-3.5 w-3.5" />} defaultOpen={false}>
-            <div className="px-4 pt-1 pb-2">
+            <div className="space-y-2 px-4 pt-1 pb-2">
               <button
                 type="button"
                 onClick={onOpenOllamaSettings}
@@ -409,6 +411,16 @@ export default function Sidebar({
               >
                 <span className="font-medium text-violet-300">Ollama ayarları</span>
                 <p className="mt-0.5 text-[10px] text-slate-500">Model, host ve süreçler — yeni sekmede düzenle</p>
+              </button>
+              <button
+                type="button"
+                onClick={onOpenSystemMetrics}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10"
+              >
+                <span className="font-medium text-emerald-300">Sistem metrikleri</span>
+                <p className="mt-0.5 text-[10px] text-slate-500">
+                  CPU, RAM, disk, GPU ve ağ — yeni sekmede canlı izleme
+                </p>
               </button>
             </div>
           </CollapsibleSection>

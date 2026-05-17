@@ -1,3 +1,4 @@
+import { OPENLANE_PLACEMENT_PRESET_IDS } from "@/lib/build-flow";
 import { fetchRunPreview } from "@/lib/job-client";
 import type { RunPreview, ToolRunTabState } from "@/lib/types";
 import { requestOpenToolRunTab } from "@/lib/workspace-events";
@@ -22,8 +23,14 @@ export async function openToolRunPreview(
   const runId = opts?.runId ?? `pending-${Date.now()}`;
   const preview = await fetchRunPreview(projectId, action);
   const selectedInputFiles = preview.default_input_files ?? preview.input_files;
+  const allFlowIds = preview.default_flow_steps ?? [];
+  const placementDefault = allFlowIds.filter((id) =>
+    (OPENLANE_PLACEMENT_PRESET_IDS as readonly string[]).includes(id)
+  );
   const selectedFlowSteps =
-    preview.selected_flow_steps ?? preview.default_flow_steps ?? [];
+    action === "openlane1-flow" && placementDefault.length > 0
+      ? placementDefault
+      : preview.selected_flow_steps ?? allFlowIds;
   requestOpenToolRunTab({
     projectId,
     action,
@@ -54,14 +61,7 @@ export async function confirmAndStartToolRun(
     runOptions.designName = toolRun.preview.design_name;
   }
   const flowSteps = toolRun.selectedFlowSteps;
-  const defaultFlow = toolRun.preview.default_flow_steps ?? [];
-  if (
-    toolRun.action === "openlane1-flow" &&
-    flowSteps?.length &&
-    defaultFlow.length > 0 &&
-    (flowSteps.length !== defaultFlow.length ||
-      !defaultFlow.every((id) => flowSteps.includes(id)))
-  ) {
+  if (toolRun.action === "openlane1-flow" && flowSteps?.length) {
     runOptions.flowSteps = flowSteps;
   }
   const result = await start(toolRun.projectId, toolRun.action, runOptions);

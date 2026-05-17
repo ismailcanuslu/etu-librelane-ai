@@ -191,6 +191,7 @@ export default function FileEditorTabs({
         || tab.kind === "vcd-viewer"
         || tab.kind === "tool-run"
         || tab.kind === "ollama-settings"
+        || tab.kind === "system-metrics"
       ) {
         loadedKeys.current.add(tab.key);
         return;

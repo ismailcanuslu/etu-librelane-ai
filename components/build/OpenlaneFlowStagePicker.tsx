@@ -16,6 +16,8 @@ interface OpenlaneFlowStagePickerProps {
   selected: string[];
   onChange: (next: string[]) => void;
   disabled?: boolean;
+  /** placement'e kadar (lint → placement) */
+  placementPresetIds?: string[];
 }
 
 export default function OpenlaneFlowStagePicker({
@@ -24,6 +26,7 @@ export default function OpenlaneFlowStagePicker({
   selected,
   onChange,
   disabled,
+  placementPresetIds,
 }: OpenlaneFlowStagePickerProps) {
   const allSelected =
     defaultIds.length > 0 && defaultIds.every((id) => selected.includes(id));
@@ -47,6 +50,21 @@ export default function OpenlaneFlowStagePicker({
     if (disabled) return;
     onChange([...defaultIds]);
   }
+
+  function selectThroughPlacement() {
+    if (disabled || !placementPresetIds?.length) return;
+    const preset = defaultIds.filter((id) => placementPresetIds.includes(id));
+    onChange(preset.length ? preset : [...defaultIds]);
+  }
+
+  const presetInOrder = useMemo(
+    () => defaultIds.filter((id) => placementPresetIds?.includes(id)),
+    [defaultIds, placementPresetIds]
+  );
+  const throughPlacement =
+    presetInOrder.length > 0 &&
+    orderedSelected.length === presetInOrder.length &&
+    presetInOrder.every((id) => selected.includes(id));
 
   return (
     <section className="space-y-3 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
@@ -81,6 +99,21 @@ export default function OpenlaneFlowStagePicker({
         >
           Tümü
         </button>
+        {placementPresetIds && placementPresetIds.length > 0 ? (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={selectThroughPlacement}
+            className={cn(
+              "rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-colors",
+              throughPlacement
+                ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-200"
+                : "border-white/10 bg-white/5 text-slate-300 hover:border-emerald-500/30"
+            )}
+          >
+            Placement&apos;e kadar
+          </button>
+        ) : null}
         <span className="text-[10px] text-slate-500">
           {orderedSelected.length}/{defaultIds.length} seçili
           {orderedSelected.length > 0 && !allSelected

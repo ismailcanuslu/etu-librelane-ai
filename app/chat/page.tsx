@@ -5,6 +5,7 @@ import { PanelRightOpen, FileCode2 } from "lucide-react";
 import Sidebar from "@/components/sidebar/Sidebar";
 import FileEditorTabs from "@/components/editor/FileEditorTabs";
 import OllamaSettingsEditor from "@/components/settings/OllamaSettingsEditor";
+import SystemMetricsEditor from "@/components/settings/SystemMetricsEditor";
 import ToolRunPreviewEditor from "@/components/build/ToolRunPreviewEditor";
 import AutonomWorkshopPane from "@/components/autonom/AutonomWorkshopPane";
 import AgentPanel from "@/components/workspace/AgentPanel";
@@ -38,6 +39,7 @@ import {
   isTextFile,
   isVcdFile,
   OLLAMA_SETTINGS_TAB_KEY,
+  SYSTEM_METRICS_TAB_KEY,
   toolRunTabKey,
   autonomWorkshopTabKey,
 } from "@/lib/types";
@@ -81,9 +83,11 @@ function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }:
           <span className="truncate">
             {tab.kind === "tool-run"
               ? `▶ ${tab.name}`
-              : tab.kind === "vcd-viewer"
-                ? `〰 ${tab.name}`
-                : tab.name}
+              : tab.kind === "system-metrics"
+                ? `📊 ${tab.name}`
+                : tab.kind === "vcd-viewer"
+                  ? `〰 ${tab.name}`
+                  : tab.name}
           </span>
           {tab.dirty && <span className="flex-shrink-0 text-[10px] text-amber-400">•</span>}
           <span
@@ -327,6 +331,24 @@ function ChatWorkspaceLayout({
     setActiveFileKey(OLLAMA_SETTINGS_TAB_KEY);
   }, []);
 
+  const handleOpenSystemMetrics = useCallback(() => {
+    setFileTabs((prev) => {
+      if (prev.some((t) => t.key === SYSTEM_METRICS_TAB_KEY)) return prev;
+      return [
+        ...prev,
+        {
+          kind: "system-metrics",
+          key: SYSTEM_METRICS_TAB_KEY,
+          bucket: "",
+          name: "Sistem metrikleri",
+          content: "",
+          dirty: false,
+        },
+      ];
+    });
+    setActiveFileKey(SYSTEM_METRICS_TAB_KEY);
+  }, []);
+
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
     if (isGdsFile(node.key, node.ext)) {
       setFileTabs((prev) => {
@@ -430,6 +452,7 @@ function ChatWorkspaceLayout({
         onProjectChange={onProjectChange}
         onOpenFile={handleOpenFile}
         onOpenOllamaSettings={handleOpenOllamaSettings}
+        onOpenSystemMetrics={handleOpenSystemMetrics}
       />
 
       <ResizeHandle direction="horizontal" onResize={resizeSidebar} />
@@ -458,6 +481,8 @@ function ChatWorkspaceLayout({
             {fileTabs.length > 0 && activeFileKey ? (
               activeTab?.kind === "ollama-settings" ? (
                 <OllamaSettingsEditor onDirtyChange={handleOllamaDirtyChange} />
+              ) : activeTab?.kind === "system-metrics" ? (
+                <SystemMetricsEditor />
               ) : activeTab?.kind === "tool-run" && activeTab.toolRun ? (
                 <ToolRunPreviewEditor
                   toolRun={activeTab.toolRun}
@@ -478,6 +503,7 @@ function ChatWorkspaceLayout({
                   tabs={fileTabs.filter(
                     (t) =>
                       t.kind !== "ollama-settings" &&
+                      t.kind !== "system-metrics" &&
                       t.kind !== "tool-run" &&
                       t.kind !== "autonom-workshop"
                   )}

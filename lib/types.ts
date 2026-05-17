@@ -94,6 +94,7 @@ export interface Project {
 // ─── Editor ──────────────────────────────────────────────────────────────────
 
 export const OLLAMA_SETTINGS_TAB_KEY = "__ollama_settings__";
+export const SYSTEM_METRICS_TAB_KEY = "__system_metrics__";
 
 /** Her çalıştırma için benzersiz sekme (aynı araç tekrar çalışınca yeni sekme). */
 export function toolRunTabKey(action: string, runId: string): string {
@@ -107,10 +108,100 @@ export function autonomWorkshopTabKey(configKey: string, runId: string): string 
 export type EditorTabKind =
   | "file"
   | "ollama-settings"
+  | "system-metrics"
   | "tool-run"
   | "autonom-workshop"
   | "gds-viewer"
   | "vcd-viewer";
+
+export interface SystemMetricsPayload {
+  collected_at: string;
+  hostname: string;
+  runtime?: {
+    in_docker: boolean;
+    host_namespace: boolean;
+    metrics_scope: string;
+    metrics_scope_label: string;
+    privileged_hint: boolean;
+  };
+  platform: {
+    system: string;
+    release: string;
+    version: string;
+    machine: string;
+    python: string;
+  };
+  uptime_seconds: number;
+  cpu: {
+    model: string;
+    physical_cores: number | null;
+    logical_cores: number | null;
+    usage_percent: number;
+    per_cpu_percent: number[];
+    frequency_mhz: {
+      current: number | null;
+      min: number | null;
+      max: number | null;
+    };
+  };
+  memory: {
+    total_bytes: number;
+    used_bytes: number;
+    available_bytes: number;
+    usage_percent: number;
+    total_human?: string;
+    used_human?: string;
+    type: string | null;
+    speed_mhz: number | null;
+    swap_total_bytes: number;
+    swap_used_bytes: number;
+    swap_usage_percent: number;
+  };
+  disks: Array<{
+    device: string;
+    mountpoint: string;
+    fstype: string;
+    total_bytes: number;
+    used_bytes: number;
+    free_bytes: number;
+    usage_percent: number;
+    total_human?: string;
+    used_human?: string;
+  }>;
+  gpus: Array<{
+    name: string;
+    vendor?: string;
+    memory_total_bytes?: number;
+    memory_used_bytes?: number;
+    memory_total_human?: string;
+    memory_used_human?: string;
+    utilization_percent: number | null;
+    temperature_c?: number | null;
+  }>;
+  network: {
+    hostname: string;
+    interfaces: Array<{
+      name: string;
+      is_up: boolean | null;
+      speed_mbps: number | null;
+      addresses: Array<{ family: string; address: string }>;
+      io: {
+        bytes_sent: number;
+        bytes_recv: number;
+        bytes_sent_human?: string;
+        bytes_recv_human?: string;
+      };
+    }>;
+    total_io: {
+      bytes_sent: number;
+      bytes_recv: number;
+      packets_sent: number;
+      packets_recv: number;
+      bytes_sent_human?: string;
+      bytes_recv_human?: string;
+    };
+  };
+}
 
 export type AutonomParamKind = "scalar" | "dimension_pair" | "die_area_rect";
 

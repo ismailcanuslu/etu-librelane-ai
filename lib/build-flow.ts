@@ -9,6 +9,14 @@ export const BUILD_FLOW_ORDER = [
 
 export type BuildFlowActionId = (typeof BUILD_FLOW_ORDER)[number];
 
+/** OpenLane1 — placement dahil, CTS/routing/GDS yok (atölye varsayılanı). */
+export const OPENLANE_PLACEMENT_PRESET_IDS = [
+  "verilator_lint_check",
+  "synthesis",
+  "floorplan",
+  "placement",
+] as const;
+
 /** Web şeridinde adım 5’ten sonra gösterilen tape-out bilgi adımı (harici Caravel işi). */
 export const TAPEOUT_FOLLOWUP_STEP = {
   id: "tapeout-caravel",

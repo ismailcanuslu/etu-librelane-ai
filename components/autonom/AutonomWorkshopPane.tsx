@@ -13,7 +13,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { BUILD_FLOW_ORDER } from "@/lib/build-flow";
+import { BUILD_FLOW_ORDER, OPENLANE_PLACEMENT_PRESET_IDS } from "@/lib/build-flow";
 import { FileAPI } from "@/lib/api";
 import {
   previewAutonomCampaign,
@@ -107,6 +107,23 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
     [preview?.input_files, spec.input_files]
   );
   const hasOpenlane = specState.build_actions.includes("openlane1-flow");
+
+  const openlaneFlowStepsSelected = useMemo(() => {
+    if (!flowDefaultIds.length) {
+      return specState.openlane_flow_steps ?? [];
+    }
+    if (specState.openlane_flow_steps?.length) {
+      return flowDefaultIds.filter((id) => specState.openlane_flow_steps!.includes(id));
+    }
+    return flowDefaultIds.filter((id) =>
+      (OPENLANE_PLACEMENT_PRESET_IDS as readonly string[]).includes(id)
+    );
+  }, [specState.openlane_flow_steps, flowDefaultIds]);
+
+  const specWithFlowSteps = useCallback((): AutonomCampaignSpec => {
+    if (!hasOpenlane) return specState;
+    return { ...specState, openlane_flow_steps: openlaneFlowStepsSelected };
+  }, [hasOpenlane, specState, openlaneFlowStepsSelected]);
 
   const patchSpec = useCallback(
     (next: AutonomCampaignSpec) => {
@@ -210,12 +227,27 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
   useEffect(() => {
     void fetchRunPreview(projectId, "openlane1-flow")
       .then((p) => {
+        const defaults = p.default_flow_steps ?? [];
         setFlowStages(p.flow_stages ?? []);
-        setFlowDefaultIds(p.default_flow_steps ?? []);
+        setFlowDefaultIds(defaults);
+        const placementPreset = defaults.filter((id) =>
+          (OPENLANE_PLACEMENT_PRESET_IDS as readonly string[]).includes(id)
+        );
+        const nextSpec: AutonomCampaignSpec = { ...specState };
+        let changed = false;
         if (!spec.input_files?.length) {
-          const files = p.default_input_files ?? p.input_files ?? [];
-          patchSpec({ ...specState, input_files: files });
+          nextSpec.input_files = p.default_input_files ?? p.input_files ?? [];
+          changed = true;
         }
+        if (
+          hasOpenlane &&
+          !specState.openlane_flow_steps?.length &&
+          placementPreset.length > 0
+        ) {
+          nextSpec.openlane_flow_steps = placementPreset;
+          changed = true;
+        }
+        if (changed) patchSpec(nextSpec);
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,12 +269,13 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
     setError(null);
     setLoading(true);
     try {
+      const specPayload = specWithFlowSteps();
       const p = await previewAutonomCampaign({
         project_id: projectId,
         config_key: configKey,
-        spec: specState,
+        spec: specPayload,
       });
-      onChange?.({ step: 2, preview: p, spec: specState });
+      onChange?.({ step: 2, preview: p, spec: specPayload });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -254,10 +287,11 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
     setError(null);
     setLoading(true);
     try {
+      const specPayload = specWithFlowSteps();
       const res = await startAutonomCampaign({
         project_id: projectId,
         config_key: configKey,
-        spec: specState,
+        spec: specPayload,
       });
       onChange?.({ campaignId: res.campaign_id });
       setLogLines([`Test başladı: ${res.campaign_id}`]);
@@ -574,7 +608,24 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
                               const next = checked
                                 ? specState.build_actions.filter((a) => a !== id)
                                 : [...specState.build_actions, id];
-                              patchSpec({ ...specState, build_actions: next });
+                              const patch: AutonomCampaignSpec = {
+                                ...specState,
+                                build_actions: next,
+                              };
+                              if (
+                                id === "openlane1-flow" &&
+                                !checked &&
+                                !specState.openlane_flow_steps?.length &&
+                                flowDefaultIds.length
+                              ) {
+                                const preset = flowDefaultIds.filter((fid) =>
+                                  (OPENLANE_PLACEMENT_PRESET_IDS as readonly string[]).includes(
+                                    fid
+                                  )
+                                );
+                                if (preset.length) patch.openlane_flow_steps = preset;
+                              }
+                              patchSpec(patch);
                             }}
                             className="mt-0.5 h-3.5 w-3.5 rounded border-white/20 accent-violet-500"
                           />
@@ -614,11 +665,8 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
               <OpenlaneFlowStagePicker
                 stages={flowStages}
                 defaultIds={flowDefaultIds}
-                selected={
-                  specState.openlane_flow_steps?.length
-                    ? specState.openlane_flow_steps
-                    : flowDefaultIds
-                }
+                selected={openlaneFlowStepsSelected}
+                placementPresetIds={[...OPENLANE_PLACEMENT_PRESET_IDS]}
                 onChange={(ids) =>
                   patchSpec({ ...specState, openlane_flow_steps: ids })
                 }
