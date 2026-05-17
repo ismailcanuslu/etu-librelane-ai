@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { Brain, ChevronDown, Cpu, MessageSquare, User } from "lucide-react";
 import MarkdownContent from "./MarkdownContent";
 import ChatAttachmentChip from "./ChatAttachmentChip";
+import CopyTextButton from "./CopyTextButton";
 import { chatAttachmentId } from "@/lib/chat-attachments";
 
 interface MessageListProps {
@@ -15,6 +16,13 @@ interface MessageListProps {
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function messageCopyText(thinking: string | undefined, content: string): string {
+  const parts: string[] = [];
+  if (thinking?.trim()) parts.push(thinking.trim());
+  if (content.trim()) parts.push(content.trim());
+  return parts.join("\n\n");
 }
 
 export function ThinkingBlock({
@@ -40,6 +48,7 @@ export function ThinkingBlock({
         <span className="min-w-0 flex-1 font-medium">
           {live ? "Canlı model düşüncesi" : "Model düşüncesi"}
         </span>
+        <CopyTextButton text={text} variant="icon" className="text-violet-300/80 hover:text-violet-100" />
         <span className="hidden flex-shrink-0 text-[10px] text-violet-300/70 sm:inline">
           {open ? "Daralt" : "Genişlet"}
         </span>
@@ -88,6 +97,7 @@ export function LiveResponseBlock({
         <span className="min-w-0 flex-1 font-medium">
           {live ? "Yanıt metni (oluşuyor)" : "Yanıt metni"}
         </span>
+        <CopyTextButton text={text} variant="icon" className="text-sky-300/80 hover:text-sky-100" />
         <span className="hidden flex-shrink-0 text-[10px] text-sky-300/70 sm:inline">
           {open ? "Daralt" : "Genişlet"}
         </span>
@@ -182,11 +192,19 @@ export default function MessageList({ messages, projectName }: MessageListProps)
 
           {/* Bubble */}
           <div className={cn(
-            "min-w-0 max-w-[75%] rounded-2xl px-4 py-3 text-sm",
+            "relative min-w-0 max-w-[75%] rounded-2xl px-4 py-3 text-sm",
             msg.role === "user"
               ? "rounded-tr-sm bg-violet-600 text-white"
               : "rounded-tl-sm bg-white/5 border border-white/8 text-slate-200"
           )}>
+            {msg.role === "assistant" && (msg.content.trim() || msg.thinking?.trim()) ? (
+              <div className="absolute right-2 top-2 z-10">
+                <CopyTextButton
+                  text={messageCopyText(msg.thinking, msg.content)}
+                  variant="icon"
+                />
+              </div>
+            ) : null}
             {msg.role === "assistant" && msg.thinking?.trim() ? (
               <ThinkingBlock text={msg.thinking} />
             ) : null}

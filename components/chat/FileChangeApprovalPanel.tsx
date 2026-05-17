@@ -80,7 +80,7 @@ export default function FileChangeApprovalPanel({
               </div>
               {isOpen && (
                 <div className="border-t border-white/8 px-2 py-2">
-                  <DiffViewer oldText={file.oldContent} newText={file.newContent} maxHeightClass="max-h-48" />
+                  <DiffViewer oldText={file.oldContent} newText={file.newContent} maxHeightClass="max-h-64" />
                 </div>
               )}
             </div>
