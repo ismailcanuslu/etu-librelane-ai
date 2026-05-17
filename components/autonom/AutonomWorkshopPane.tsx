@@ -8,9 +8,13 @@ import {
   Loader2,
   Play,
   AlertTriangle,
+  Plus,
+  Search,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BUILD_FLOW_ORDER } from "@/lib/build-flow";
+import { FileAPI } from "@/lib/api";
 import {
   previewAutonomCampaign,
   startAutonomCampaign,
@@ -33,12 +37,40 @@ import {
 } from "@/lib/openlane-config-catalog-client";
 import { getAutonomCampaign } from "@/lib/autonom-client";
 
-const BUILD_LABELS: Record<string, string> = {
-  lint: "Lint",
-  synthesis: "Sentez",
-  verification: "Doğrulama",
-  simulation: "Simülasyon",
-  "openlane1-flow": "OpenLane1 Flow",
+const BUILD_TOOLS: Record<
+  string,
+  { label: string; short: string; description: string }
+> = {
+  lint: {
+    label: "Lint",
+    short: "Lint",
+    description:
+      "Verilog dosyalarının Yosys ile okunup okunamadığını ve temel RTL sözdizimini kontrol eder.",
+  },
+  synthesis: {
+    label: "RTL Sentez",
+    short: "Sentez",
+    description:
+      "RTL’den gate-level netlist üretir; sentez hatalarını erken yakalamak için kullanılır.",
+  },
+  verification: {
+    label: "Doğrulama",
+    short: "Doğrulama",
+    description:
+      "Hiyerarşi ve modül bağlantılarının tutarlı olduğunu Yosys ile hızlıca doğrular.",
+  },
+  simulation: {
+    label: "Simülasyon",
+    short: "Simülasyon",
+    description:
+      "Testbench varsa iverilog/vvp ile davranış simülasyonu çalıştırır (tb/tb_*.v öncelikli).",
+  },
+  "openlane1-flow": {
+    label: "OpenLane1 Flow",
+    short: "PnR Flow",
+    description:
+      "Seçilen OpenLane aşamalarıyla layout (GDS, DEF, log). Config: openlane/<design>/config.json.",
+  },
 };
 
 interface AutonomWorkshopPaneProps {
@@ -63,8 +95,17 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
   const [flowDefaultIds, setFlowDefaultIds] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<OpenlaneConfigCatalog | null>(null);
   const [flagQuery, setFlagQuery] = useState(spec.param.flag);
+  const [projectFiles, setProjectFiles] = useState<string[]>([]);
+  const [showAddFiles, setShowAddFiles] = useState(false);
+  const [addFileQuery, setAddFileQuery] = useState("");
+  const [expandedToolId, setExpandedToolId] = useState<string | null>(null);
 
   const locked = Boolean(campaignId);
+  const selectedFiles = specState.input_files ?? [];
+  const suggestedFiles = useMemo(
+    () => new Set(preview?.input_files ?? spec.input_files ?? []),
+    [preview?.input_files, spec.input_files]
+  );
   const hasOpenlane = specState.build_actions.includes("openlane1-flow");
 
   const patchSpec = useCallback(
@@ -78,6 +119,63 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
   useEffect(() => {
     void fetchOpenlaneConfigCatalog().then(setCatalog).catch(() => setCatalog(null));
   }, []);
+
+  useEffect(() => {
+    if (locked) return;
+    let cancelled = false;
+    void FileAPI.listObjects(projectId, "", true).then((objects) => {
+      if (cancelled) return;
+      const keys = objects
+        .map((o) => o.key)
+        .filter(
+          (k) =>
+            k &&
+            !k.endsWith("/") &&
+            !k.startsWith("_jobs/") &&
+            !k.startsWith("_autonom_jobs/")
+        )
+        .sort();
+      setProjectFiles(keys);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, locked]);
+
+  const updateInputFiles = useCallback(
+    (next: string[]) => {
+      const sorted = [...new Set(next)].sort();
+      patchSpec({ ...specState, input_files: sorted });
+    },
+    [patchSpec, specState]
+  );
+
+  const toggleInputFile = useCallback(
+    (key: string) => {
+      if (selectedFiles.includes(key)) {
+        updateInputFiles(selectedFiles.filter((k) => k !== key));
+      } else {
+        updateInputFiles([...selectedFiles, key]);
+      }
+    },
+    [selectedFiles, updateInputFiles]
+  );
+
+  const addInputFiles = useCallback(
+    (keys: string[]) => {
+      updateInputFiles([...selectedFiles, ...keys]);
+    },
+    [selectedFiles, updateInputFiles]
+  );
+
+  const addFileCandidates = useMemo(() => {
+    const q = addFileQuery.trim().toLowerCase();
+    const selectedSet = new Set(selectedFiles);
+    return projectFiles
+      .filter((k) => !selectedSet.has(k))
+      .filter((k) => !q || k.toLowerCase().includes(q))
+      .slice(0, 80);
+  }, [projectFiles, selectedFiles, addFileQuery]);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -162,7 +260,7 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
         spec: specState,
       });
       onChange?.({ campaignId: res.campaign_id });
-      setLogLines([`Kampanya başladı: ${res.campaign_id}`]);
+      setLogLines([`Test başladı: ${res.campaign_id}`]);
       subscribeAutonomCampaign(res.campaign_id, {
         onEvent: (type, data) => {
           if (type === "iteration_started") {
@@ -231,13 +329,38 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
           </div>
         </div>
         <div className="flex items-center gap-1">
-          <span className={cn("rounded px-2 py-0.5 text-[10px]", step === 1 ? "bg-violet-600 text-white" : "bg-white/10 text-slate-500")}>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => onChange?.({ step: 1 })}
+            className={cn(
+              "rounded px-2 py-0.5 text-[10px] transition-colors",
+              step === 1
+                ? "bg-violet-600 text-white"
+                : "bg-white/10 text-slate-500 hover:bg-white/15 hover:text-slate-300",
+              locked && "cursor-default opacity-60"
+            )}
+          >
             1. Parametre
-          </span>
+          </button>
           <ChevronRight className="h-3 w-3 text-slate-600" />
-          <span className={cn("rounded px-2 py-0.5 text-[10px]", step === 2 ? "bg-violet-600 text-white" : "bg-white/10 text-slate-500")}>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => {
+              if (preview) onChange?.({ step: 2 });
+              else void goToStep2();
+            }}
+            className={cn(
+              "rounded px-2 py-0.5 text-[10px] transition-colors",
+              step === 2
+                ? "bg-violet-600 text-white"
+                : "bg-white/10 text-slate-500 hover:bg-white/15 hover:text-slate-300",
+              locked && "cursor-default opacity-60"
+            )}
+          >
             2. Onay
-          </span>
+          </button>
         </div>
       </div>
 
@@ -426,33 +549,62 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
 
             <section className="space-y-2 rounded-lg border border-white/10 p-3">
               <p className="text-[11px] font-semibold text-slate-300">Build araçları</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {BUILD_FLOW_ORDER.map((id) => {
+                  const meta = BUILD_TOOLS[id];
                   const checked = specState.build_actions.includes(id);
+                  const expanded = expandedToolId === id;
                   return (
-                    <label
+                    <div
                       key={id}
                       className={cn(
-                        "flex cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[10px]",
+                        "relative rounded-lg border p-2.5 transition-all",
                         checked
-                          ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
-                          : "border-white/10 text-slate-500"
+                          ? "border-violet-500/50 bg-gradient-to-br from-violet-500/20 to-violet-900/10 shadow-[0_0_0_1px_rgba(139,92,246,0.15)]"
+                          : "border-white/10 bg-[#0d1117]/80 hover:border-white/20"
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        disabled={locked}
-                        checked={checked}
-                        onChange={() => {
-                          const next = checked
-                            ? specState.build_actions.filter((a) => a !== id)
-                            : [...specState.build_actions, id];
-                          patchSpec({ ...specState, build_actions: next });
-                        }}
-                        className="h-3 w-3"
-                      />
-                      {BUILD_LABELS[id] ?? id}
-                    </label>
+                      <div className="flex items-start gap-2">
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                          <input
+                            type="checkbox"
+                            disabled={locked}
+                            checked={checked}
+                            onChange={() => {
+                              const next = checked
+                                ? specState.build_actions.filter((a) => a !== id)
+                                : [...specState.build_actions, id];
+                              patchSpec({ ...specState, build_actions: next });
+                            }}
+                            className="mt-0.5 h-3.5 w-3.5 rounded border-white/20 accent-violet-500"
+                          />
+                          <span className="text-[11px] font-medium text-slate-200">
+                            {meta?.label ?? id}
+                          </span>
+                          {checked && (
+                            <CheckCircle2 className="ml-auto h-3.5 w-3.5 shrink-0 text-violet-400" />
+                          )}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedToolId(expanded ? null : id)}
+                          className={cn(
+                            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-slate-400 transition-colors",
+                            expanded
+                              ? "border-sky-500/40 bg-sky-500/15 text-sky-300"
+                              : "border-white/10 hover:border-white/25 hover:text-slate-200"
+                          )}
+                          aria-label={`${meta?.label ?? id} hakkında bilgi`}
+                        >
+                          <Info className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      {expanded && meta && (
+                        <p className="mt-2 border-t border-white/8 pt-2 text-[10px] leading-relaxed text-slate-400">
+                          {meta.description}
+                        </p>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -494,13 +646,69 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
               <p className="mb-1 text-[10px] font-semibold uppercase text-slate-500">
                 Etkilenen dosyalar
               </p>
-              <div className="max-h-40 overflow-y-auto rounded border border-white/10 p-2">
+              <p className="mb-2 text-[10px] text-slate-600">
+                Her iterasyonda job workspace&apos;e kopyalanır. Listeden ekleyip çıkarabilirsiniz.
+              </p>
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-dashed border-white/10 bg-[#0d1117]/60 p-2">
                 <InputFileTreeView
-                  keys={preview.input_files}
+                  keys={selectedFiles}
                   projectId={projectId}
-                  readonly
+                  suggested={suggestedFiles}
+                  onToggle={toggleInputFile}
+                  onRemove={(key) =>
+                    updateInputFiles(selectedFiles.filter((k) => k !== key))
+                  }
+                  emptyLabel="Henüz dosya seçilmedi — aşağıdan ekleyin."
                 />
               </div>
+              {!locked && (
+                <>
+                  {!showAddFiles ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddFiles(true)}
+                      className="mt-2 flex items-center gap-1 rounded-lg border border-dashed border-white/15 px-2.5 py-1.5 text-[11px] text-slate-400 hover:border-violet-500/40 hover:text-violet-300"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Projeden dosya ekle
+                    </button>
+                  ) : (
+                    <div className="mt-2 rounded-lg border border-violet-500/25 bg-violet-500/5 p-2">
+                      <div className="mb-2 flex items-center gap-2">
+                        <Search className="h-3.5 w-3.5 text-slate-500" />
+                        <input
+                          value={addFileQuery}
+                          onChange={(e) => setAddFileQuery(e.target.value)}
+                          placeholder="Dosya yolu ara…"
+                          className="min-w-0 flex-1 bg-transparent text-[11px] text-slate-200 outline-none placeholder:text-slate-600"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAddFiles(false);
+                            setAddFileQuery("");
+                          }}
+                          className="text-[10px] text-slate-500 hover:text-slate-300"
+                        >
+                          Kapat
+                        </button>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto rounded border border-white/10 bg-[#0d1117]/40 p-1">
+                        <InputFileTreeView
+                          keys={addFileCandidates}
+                          projectId={projectId}
+                          emptyLabel="Eşleşen dosya yok."
+                          onAdd={(key) => {
+                            addInputFiles([key]);
+                            setAddFileQuery("");
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </section>
           </>
         )}
@@ -547,7 +755,7 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-amber-600 py-2.5 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-50"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              Kampanyayı başlat
+              Testi başlat
             </button>
           </>
         )}
@@ -557,7 +765,7 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
             onClick={() => void cancelAutonomCampaign(campaignId)}
             className="flex-1 rounded-lg border border-rose-500/40 py-2.5 text-sm text-rose-300"
           >
-            Kampanyayı iptal et
+            Testi iptal et
           </button>
         )}
       </div>
