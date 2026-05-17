@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   XCircle,
   Plus,
-  X,
   Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,7 +19,13 @@ import { FileAPI } from "@/lib/api";
 import { useActiveJob } from "@/lib/active-job-context";
 import { confirmAndStartToolRun } from "@/lib/run-tool-with-preview";
 import type { ToolRunTabState } from "@/lib/types";
+import InputFileTreeView from "@/components/build/InputFileTreeView";
 import JobArtifactPreview from "./JobArtifactPreview";
+import { keysFromWorkspaceAttachment } from "@/lib/input-file-tree";
+import {
+  readWorkspaceAttachment,
+  WORKSPACE_ATTACHMENT_MIME,
+} from "@/lib/workspace-drag";
 
 interface ToolRunPreviewEditorProps {
   toolRun: ToolRunTabState;
@@ -48,6 +53,7 @@ export default function ToolRunPreviewEditor({
   const [showAdd, setShowAdd] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [fileDragOver, setFileDragOver] = useState(false);
 
   const jobTab = useMemo(
     () => (jobId ? tabs.find((t) => t.jobId === jobId) : undefined),
@@ -94,13 +100,30 @@ export default function ToolRunPreviewEditor({
     updateSelected(selected.filter((k) => k !== key));
   };
 
+  const addKeys = useCallback(
+    (keys: string[]) => {
+      if (keys.length === 0) return;
+      updateSelected([...selected, ...keys]);
+    },
+    [selected, updateSelected]
+  );
+
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setFileDragOver(false);
+    const attachment = readWorkspaceAttachment(e.dataTransfer);
+    if (!attachment) return;
+    const keys = keysFromWorkspaceAttachment(attachment, projectId, projectFiles);
+    addKeys(keys);
+  }
+
   const addCandidates = useMemo(() => {
     const q = addQuery.trim().toLowerCase();
     const inList = new Set(selected);
     return projectFiles
       .filter((k) => !inList.has(k))
       .filter((k) => !q || k.toLowerCase().includes(q))
-      .slice(0, 40);
+      .slice(0, 200);
   }, [addQuery, projectFiles, selected]);
 
   const validationError = useMemo(() => {
@@ -190,62 +213,56 @@ export default function ToolRunPreviewEditor({
             Job workspace&apos;e kopyalanacak dosyalar
           </h3>
           <p className="mb-2 text-[10px] text-slate-600">
-            Önerilen dosyalar işaretli gelir; ekleyip çıkarabilir, sonra çalıştırmayı onaylayabilirsiniz.
+            Önerilen dosyalar işaretli gelir. Sol dosya ağacından sürükleyip buraya bırakabilir veya
+            listeden ekleyip çıkarabilirsiniz.
           </p>
 
           {locked ? (
-            <ul className="space-y-0.5">
-              {(toolRun.selectedInputFiles ?? selected).map((key) => (
-                <li key={key} className="break-all font-mono text-[11px] text-slate-300">
-                  {key}
-                </li>
-              ))}
-            </ul>
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-white/10 bg-[#0d1117]/60 p-2">
+              <InputFileTreeView
+                keys={toolRun.selectedInputFiles ?? selected}
+                projectId={projectId}
+                suggested={suggested}
+                readonly
+                onOpenFile={onOpenFile}
+              />
+            </div>
           ) : (
             <>
-              <ul className="mb-2 max-h-48 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#0d1117]/60 p-2">
-                {selected.length === 0 ? (
-                  <li className="text-[11px] text-slate-600">Henüz dosya seçilmedi.</li>
-                ) : (
-                  selected.map((key) => (
-                    <li
-                      key={key}
-                      className="flex items-start gap-2 rounded border border-white/5 bg-white/[0.03] px-2 py-1.5"
-                    >
-                      <input
-                        type="checkbox"
-                        checked
-                        onChange={() => toggleFile(key)}
-                        className="mt-0.5 rounded border-white/20"
-                      />
-                      <div className="min-w-0 flex-1">
-                        {onOpenFile ? (
-                          <button
-                            type="button"
-                            onClick={() => onOpenFile(key)}
-                            className="break-all text-left font-mono text-[11px] text-violet-300 hover:underline"
-                          >
-                            {key}
-                          </button>
-                        ) : (
-                          <span className="break-all font-mono text-[11px] text-slate-300">{key}</span>
-                        )}
-                        {suggested.has(key) && (
-                          <span className="ml-1 text-[9px] uppercase text-sky-400/80">önerilen</span>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeFile(key)}
-                        className="flex-shrink-0 rounded p-0.5 text-slate-500 hover:bg-white/10 hover:text-rose-300"
-                        aria-label="Listeden çıkar"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </li>
-                  ))
+              <div
+                className={cn(
+                  "mb-2 max-h-56 overflow-y-auto rounded-lg border bg-[#0d1117]/60 p-2 transition-colors",
+                  fileDragOver
+                    ? "border-violet-500/50 bg-violet-500/10 ring-1 ring-inset ring-violet-500/30"
+                    : "border-dashed border-white/10"
                 )}
-              </ul>
+                onDragOver={(e) => {
+                  if (!e.dataTransfer.types.includes(WORKSPACE_ATTACHMENT_MIME)) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "copy";
+                  setFileDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setFileDragOver(false);
+                  }
+                }}
+                onDrop={handleFileDrop}
+              >
+                {fileDragOver && (
+                  <p className="mb-2 rounded border border-violet-500/30 bg-violet-500/15 px-2 py-1.5 text-center text-[10px] text-violet-200">
+                    Bırakın — dosya veya klasör listeye eklenecek
+                  </p>
+                )}
+                <InputFileTreeView
+                  keys={selected}
+                  projectId={projectId}
+                  suggested={suggested}
+                  onToggle={toggleFile}
+                  onRemove={removeFile}
+                  onOpenFile={onOpenFile}
+                />
+              </div>
 
               {!showAdd ? (
                 <button
@@ -278,26 +295,17 @@ export default function ToolRunPreviewEditor({
                       Kapat
                     </button>
                   </div>
-                  <ul className="max-h-36 space-y-0.5 overflow-y-auto">
-                    {addCandidates.length === 0 ? (
-                      <li className="text-[10px] text-slate-600">Eşleşen dosya yok.</li>
-                    ) : (
-                      addCandidates.map((key) => (
-                        <li key={key}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateSelected([...selected, key]);
-                              setAddQuery("");
-                            }}
-                            className="w-full break-all rounded px-1.5 py-1 text-left font-mono text-[10px] text-slate-300 hover:bg-white/10"
-                          >
-                            + {key}
-                          </button>
-                        </li>
-                      ))
-                    )}
-                  </ul>
+                  <div className="max-h-48 overflow-y-auto rounded border border-white/10 bg-[#0d1117]/40 p-1">
+                    <InputFileTreeView
+                      keys={addCandidates}
+                      projectId={projectId}
+                      emptyLabel="Eşleşen dosya yok."
+                      onAdd={(key) => {
+                        addKeys([key]);
+                        setAddQuery("");
+                      }}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -358,7 +366,12 @@ export default function ToolRunPreviewEditor({
               <p className="text-[10px] text-slate-500">Job ID</p>
               <p className="break-all font-mono text-[11px] text-slate-300">{jobId}</p>
             </section>
-            <JobArtifactPreview projectId={projectId} jobId={jobId} action={action} />
+            <JobArtifactPreview
+              projectId={projectId}
+              jobId={jobId}
+              action={action}
+              onOpenFile={onOpenFile}
+            />
           </>
         )}
       </div>

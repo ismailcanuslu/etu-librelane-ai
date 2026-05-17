@@ -100,7 +100,7 @@ export function toolRunTabKey(action: string, runId: string): string {
   return `__tool_run__:${action}:${runId}`;
 }
 
-export type EditorTabKind = "file" | "ollama-settings" | "tool-run" | "gds-viewer";
+export type EditorTabKind = "file" | "ollama-settings" | "tool-run" | "gds-viewer" | "vcd-viewer";
 
 export interface PdkRuntimeInfo {
   pdk_family: string;
@@ -244,6 +244,7 @@ export function isTextFile(ext?: string): boolean {
 }
 
 export { isGdsFile, gdsViewerTabKey } from "@/lib/gds-file";
+export { isVcdFile } from "@/lib/vcd-file";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 

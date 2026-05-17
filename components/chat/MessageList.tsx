@@ -64,7 +64,7 @@ export function ThinkingBlock({
       )}
       {open && (
         <div
-          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-violet-500/25 px-3 py-3 [scrollbar-color:rgba(139,92,246,0.5)_transparent]"
+          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-violet-500/25 px-4 py-4 [scrollbar-color:rgba(139,92,246,0.5)_transparent]"
           title="Düşünce metni"
         >
           <MarkdownContent content={text} variant="thinking" />
@@ -113,7 +113,7 @@ export function LiveResponseBlock({
       )}
       {open && (
         <div
-          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-sky-500/25 px-3 py-3 [scrollbar-color:rgba(56,189,248,0.45)_transparent]"
+          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-sky-500/25 px-4 py-4 [scrollbar-color:rgba(56,189,248,0.45)_transparent]"
           title="Yanıt metni"
         >
           <MarkdownContent content={text} />

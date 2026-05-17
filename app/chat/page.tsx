@@ -26,7 +26,13 @@ import {
   saveActiveProjectId,
 } from "@/lib/store";
 import type { Project, FileTab, FileNode, ToolRunTabState } from "@/lib/types";
-import { isGdsFile, isTextFile, OLLAMA_SETTINGS_TAB_KEY, toolRunTabKey } from "@/lib/types";
+import {
+  isGdsFile,
+  isTextFile,
+  isVcdFile,
+  OLLAMA_SETTINGS_TAB_KEY,
+  toolRunTabKey,
+} from "@/lib/types";
 import {
   OPEN_TOOL_RUN_TAB_EVENT,
   type OpenToolRunTabDetail,
@@ -63,7 +69,11 @@ function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }:
           )}
         >
           <span className="truncate">
-            {tab.kind === "tool-run" ? `▶ ${tab.name}` : tab.name}
+            {tab.kind === "tool-run"
+              ? `▶ ${tab.name}`
+              : tab.kind === "vcd-viewer"
+                ? `〰 ${tab.name}`
+                : tab.name}
           </span>
           {tab.dirty && <span className="flex-shrink-0 text-[10px] text-amber-400">•</span>}
           <span
@@ -260,6 +270,24 @@ function ChatWorkspaceLayout({
           ...prev,
           {
             kind: "gds-viewer",
+            key: node.key,
+            bucket,
+            name: node.name,
+            content: "",
+            dirty: false,
+          },
+        ];
+      });
+      setActiveFileKey(node.key);
+      return;
+    }
+    if (isVcdFile(node.key, node.ext)) {
+      setFileTabs((prev) => {
+        if (prev.some((t) => t.key === node.key && t.bucket === bucket)) return prev;
+        return [
+          ...prev,
+          {
+            kind: "vcd-viewer",
             key: node.key,
             bucket,
             name: node.name,

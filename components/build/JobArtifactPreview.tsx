@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { ExternalLink, Loader2 } from "lucide-react";
+import DownloadFileButton from "@/components/workspace/DownloadFileButton";
 import { FileAPI } from "@/lib/api";
 import { isGdsFile } from "@/lib/gds-file";
 import { FLOW_LAYOUT_PNG_NAME } from "@/lib/layout-preview-api";
@@ -13,13 +14,16 @@ export default function JobArtifactPreview({
   projectId,
   jobId,
   action,
+  onOpenFile,
 }: {
   projectId: string;
   jobId: string;
   action: string;
+  onOpenFile?: (key: string) => void;
 }) {
   const { tabs } = useActiveJob();
   const jobTab = tabs.find((t) => t.jobId === jobId);
+  const [vcdKeys, setVcdKeys] = useState<string[]>([]);
   const [vcdText, setVcdText] = useState<string | null>(null);
   const [gdsBuffer, setGdsBuffer] = useState<ArrayBuffer | null>(null);
   const [flowPngUrl, setFlowPngUrl] = useState<string | null>(null);
@@ -30,6 +34,7 @@ export default function JobArtifactPreview({
 
   useEffect(() => {
     if (!finished || !jobTab?.artifactsPrefix) {
+      setVcdKeys([]);
       setVcdText(null);
       setGdsBuffer(null);
       setFlowPngUrl((prev) => {
@@ -56,7 +61,12 @@ export default function JobArtifactPreview({
         ]);
         const objects = [...jobRootObjects, ...artifactObjects];
 
-        const vcdKey = objects.find((o) => o.key.toLowerCase().endsWith(".vcd"))?.key;
+        const foundVcds = objects
+          .filter((o) => o.key.toLowerCase().endsWith(".vcd"))
+          .map((o) => o.key)
+          .sort();
+        if (!cancelled) setVcdKeys(foundVcds);
+        const vcdKey = foundVcds[0];
         const flowPngKey =
           action === "openlane1-flow"
             ? objects.find((o) => o.key.endsWith(FLOW_LAYOUT_PNG_NAME))?.key
@@ -124,6 +134,31 @@ export default function JobArtifactPreview({
             className="max-h-[min(70vh,640px)] w-full rounded-lg border border-white/10 object-contain bg-[#0a0f16]"
           />
         </div>
+      )}
+      {vcdKeys.length > 0 && (
+        <ul className="space-y-1.5">
+          {vcdKeys.map((key) => (
+            <li
+              key={key}
+              className="flex items-center gap-2 rounded-lg border border-rose-500/20 bg-rose-500/5 px-2.5 py-1.5"
+            >
+              {onOpenFile ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenFile(key)}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left font-mono text-[11px] text-rose-300 hover:underline"
+                  title="Yeni sekmede dalga formu"
+                >
+                  <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{key}</span>
+                </button>
+              ) : (
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-rose-300">{key}</span>
+              )}
+              <DownloadFileButton projectId={projectId} fileKey={key} />
+            </li>
+          ))}
+        </ul>
       )}
       {vcdText && <VcdWaveformViewer vcdText={vcdText} />}
       {!flowPngUrl && gdsBuffer && (

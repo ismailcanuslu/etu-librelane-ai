@@ -4,8 +4,9 @@ import { useEffect, useCallback, useRef } from "react";
 import { X, Save, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileTab } from "@/lib/types";
-import { isGdsFile, isMarkdownFile } from "@/lib/types";
+import { isGdsFile, isMarkdownFile, isVcdFile } from "@/lib/types";
 import GdsViewerPane from "@/components/editor/GdsViewerPane";
+import VcdViewerPane from "@/components/editor/VcdViewerPane";
 import { isOpenlaneConfigFile } from "@/lib/openlane-config-io";
 import { FileAPI } from "@/lib/api";
 import MarkdownEditorPane from "@/components/editor/MarkdownEditorPane";
@@ -185,7 +186,12 @@ export default function FileEditorTabs({
 
   const loadTab = useCallback(
     async (tab: FileTab) => {
-      if (tab.kind === "gds-viewer" || tab.kind === "tool-run" || tab.kind === "ollama-settings") {
+      if (
+        tab.kind === "gds-viewer"
+        || tab.kind === "vcd-viewer"
+        || tab.kind === "tool-run"
+        || tab.kind === "ollama-settings"
+      ) {
         loadedKeys.current.add(tab.key);
         return;
       }
@@ -283,6 +289,8 @@ export default function FileEditorTabs({
       {activeTab ? (
         activeTab.kind === "gds-viewer" || isGdsFile(activeTab.key, activeTab.name.split(".").pop()) ? (
           <GdsViewerPane key={activeTab.key} tab={activeTab} />
+        ) : activeTab.kind === "vcd-viewer" || isVcdFile(activeTab.key, activeTab.name.split(".").pop()) ? (
+          <VcdViewerPane key={activeTab.key} tab={activeTab} />
         ) : errorKeys.current.has(activeTab.key) ? (
           <ErrorPane message={errorKeys.current.get(activeTab.key)!} />
         ) : loadingKeys.current.has(activeTab.key) || !loadedKeys.current.has(activeTab.key) ? (

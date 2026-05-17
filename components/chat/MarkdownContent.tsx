@@ -1,16 +1,20 @@
 "use client";
 
 import { isValidElement, type ReactNode } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { markdownProseRoot, md } from "@/lib/markdown-prose";
+import type { MarkdownVariant } from "@/lib/markdown-prose";
+import { normalizeMarkdownDisplay } from "@/lib/normalize-markdown";
 import SyntaxCodeBlock from "./SyntaxCodeBlock";
 
 interface MarkdownContentProps {
   content: string;
   className?: string;
-  /** Düşünce bloğu için daha kompakt tipografi */
-  variant?: "default" | "thinking";
+  variant?: MarkdownVariant;
+  /** false: ham metin (editor senkron) */
+  normalize?: boolean;
 }
 
 function extractText(node: ReactNode): string {
@@ -37,73 +41,107 @@ function parseFenceFromCodeChild(children: ReactNode): { code: string; language:
   };
 }
 
+const markdownComponents: Components = {
+  p: ({ children }) => <p className={md.p}>{children}</p>,
+  h1: ({ children }) => <h1 className={md.h1}>{children}</h1>,
+  h2: ({ children }) => <h2 className={md.h2}>{children}</h2>,
+  h3: ({ children }) => <h3 className={md.h3}>{children}</h3>,
+  h4: ({ children }) => <h4 className={md.h4}>{children}</h4>,
+  h5: ({ children }) => <h5 className={md.h5}>{children}</h5>,
+  h6: ({ children }) => <h6 className={md.h6}>{children}</h6>,
+  ul: ({ children, className }) => (
+    <ul className={cn(md.ul, className?.includes("contains-task-list") && md.taskList)}>
+      {children}
+    </ul>
+  ),
+  ol: ({ children }) => <ol className={md.ol}>{children}</ol>,
+  li: ({ children, className }) => (
+    <li className={cn(md.li, className?.includes("task-list-item") && "list-none pl-0")}>
+      {children}
+    </li>
+  ),
+  blockquote: ({ children }) => <blockquote className={md.blockquote}>{children}</blockquote>,
+  hr: () => <hr className={md.hr} />,
+  strong: ({ children }) => <strong className={md.strong}>{children}</strong>,
+  em: ({ children }) => <em className={md.em}>{children}</em>,
+  del: ({ children }) => <del className={md.del}>{children}</del>,
+  img: ({ src, alt }) => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src ?? ""} alt={alt ?? ""} className={md.img} loading="lazy" />
+  ),
+  table: ({ children }) => (
+    <div className={md.tableWrap}>
+      <table className={md.table}>{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className={md.thead}>{children}</thead>,
+  tbody: ({ children }) => <tbody>{children}</tbody>,
+  tr: ({ children }) => <tr className={md.tr}>{children}</tr>,
+  th: ({ children }) => <th className={md.th}>{children}</th>,
+  td: ({ children }) => <td className={md.td}>{children}</td>,
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className={md.a}>
+      {children}
+    </a>
+  ),
+  pre: ({ children }) => {
+    const { code, language } = parseFenceFromCodeChild(children);
+    if (!code) {
+      return (
+        <pre className="my-4 overflow-x-auto rounded-lg border border-white/10 bg-[#0d1117] p-4 text-[13px] leading-relaxed">
+          {children}
+        </pre>
+      );
+    }
+    return (
+      <div className="my-4">
+        <SyntaxCodeBlock code={code} language={language} />
+      </div>
+    );
+  },
+  code: ({ className: codeClass, children, ...props }) => {
+    const isFence = /language-/.test(codeClass ?? "");
+    if (isFence) {
+      return (
+        <code className={codeClass} {...props}>
+          {children}
+        </code>
+      );
+    }
+    return (
+      <code className={cn(md.inlineCode, codeClass)} {...props}>
+        {children}
+      </code>
+    );
+  },
+  input: ({ type, checked, disabled }) => {
+    if (type === "checkbox") {
+      return (
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          readOnly
+          className="mt-1.5 h-4 w-4 flex-shrink-0 rounded border-white/20 accent-violet-500"
+        />
+      );
+    }
+    return <input type={type} checked={checked} disabled={disabled} readOnly />;
+  },
+};
+
 export default function MarkdownContent({
   content,
   className,
   variant = "default",
+  normalize = true,
 }: MarkdownContentProps) {
-  const isThinking = variant === "thinking";
+  const source = normalize ? normalizeMarkdownDisplay(content) : content;
 
   return (
-    <div
-      className={cn(
-        "min-w-0 max-w-full break-words [overflow-wrap:anywhere]",
-        isThinking ? "text-[12px] leading-relaxed text-slate-100" : "text-sm leading-relaxed text-slate-200",
-        "[&_p]:mb-2 [&_p:last-child]:mb-0",
-        "[&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-4",
-        "[&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-4",
-        "[&_li]:mb-0.5",
-        "[&_h1]:mb-2 [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-slate-100",
-        "[&_h2]:mb-2 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:text-slate-100",
-        "[&_h3]:mb-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-200",
-        "[&_strong]:font-semibold [&_strong]:text-slate-100",
-        "[&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[11px]",
-        "[&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/40 [&_blockquote]:pl-3 [&_blockquote]:text-slate-300",
-        className
-      )}
-    >
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          pre: ({ children }) => {
-            const { code, language } = parseFenceFromCodeChild(children);
-            if (!code) {
-              return (
-                <pre className="my-2 overflow-x-auto rounded-lg border border-white/10 bg-[#0d1117] p-3 text-[11px]">
-                  {children}
-                </pre>
-              );
-            }
-            return <SyntaxCodeBlock code={code} language={language} />;
-          },
-          code: ({ className: codeClass, children, ...props }) => {
-            const isFence = /language-/.test(codeClass ?? "");
-            if (isFence) {
-              return (
-                <code className={codeClass} {...props}>
-                  {children}
-                </code>
-              );
-            }
-            return (
-              <code className={codeClass} {...props}>
-                {children}
-              </code>
-            );
-          },
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-violet-300 underline hover:text-violet-200"
-            >
-              {children}
-            </a>
-          ),
-        }}
-      >
-        {content}
+    <div className={cn(markdownProseRoot(variant), className)}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {source}
       </ReactMarkdown>
     </div>
   );

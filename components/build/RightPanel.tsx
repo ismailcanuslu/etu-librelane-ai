@@ -33,6 +33,7 @@ import { analyzeLog } from "@/lib/ai-client";
 import { FileAPI } from "@/lib/api";
 import { listJobs, getJobLog, listTools } from "@/lib/job-client";
 import { openToolRunPreview } from "@/lib/run-tool-with-preview";
+import DownloadFileButton from "@/components/workspace/DownloadFileButton";
 import PdkInfoBanner from "./PdkInfoBanner";
 import { BuildFlowStrip } from "./BuildFlowStrip";
 import { BUILD_FLOW_ORDER } from "@/lib/build-flow";
@@ -830,17 +831,26 @@ function AnalysisTab({
                 <p className="text-[11px] text-slate-600">Bu çalıştırma için artefakt listesi boş.</p>
               )}
               <div className="flex max-h-32 flex-col gap-1 overflow-y-auto">
-                {artifacts.map((item) => (
-                  <button
-                    key={item.key}
-                    type="button"
-                    onClick={() => onOpenWorkspaceFile?.(item.key)}
-                    disabled={!onOpenWorkspaceFile}
-                    className="truncate rounded border border-white/5 px-2 py-1 text-left text-[11px] text-slate-300 hover:bg-white/5 disabled:cursor-default disabled:opacity-70"
-                  >
-                    {item.key.replace(selectedJob.artifacts_prefix ?? "", "").replace(/^\//, "") || item.key}
-                  </button>
-                ))}
+                {artifacts.map((item) => {
+                  const label =
+                    item.key.replace(selectedJob.artifacts_prefix ?? "", "").replace(/^\//, "") || item.key;
+                  return (
+                    <div
+                      key={item.key}
+                      className="flex items-center gap-1 rounded border border-white/5 px-2 py-1 hover:bg-white/5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onOpenWorkspaceFile?.(item.key)}
+                        disabled={!onOpenWorkspaceFile}
+                        className="min-w-0 flex-1 truncate text-left text-[11px] text-slate-300 disabled:cursor-default disabled:opacity-70"
+                      >
+                        {label}
+                      </button>
+                      <DownloadFileButton projectId={projectId} fileKey={item.key} />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/types";
-import { buildFileTree, isGdsFile, isTextFile } from "@/lib/types";
+import { buildFileTree, isGdsFile, isTextFile, isVcdFile } from "@/lib/types";
+import DownloadFileButton from "@/components/workspace/DownloadFileButton";
 import { FileAPI } from "@/lib/api";
 import { WORKSPACE_REFRESH_EVENT } from "@/lib/workspace-events";
 import { encodeWorkspaceAttachment, WORKSPACE_ATTACHMENT_MIME } from "@/lib/workspace-drag";
@@ -115,7 +116,9 @@ function FileRow({
         style={{ paddingLeft: `${8 + depth * 12}px` }}
         onClick={() => {
           if (isDir) setOpen((v) => !v);
-          else if (isTextFile(node.ext) || isGdsFile(node.key, node.ext)) onOpenFile(node);
+          else if (isTextFile(node.ext) || isGdsFile(node.key, node.ext) || isVcdFile(node.key, node.ext)) {
+            onOpenFile(node);
+          }
         }}
         onDoubleClick={() => {
           if (!isDir) onOpenFile(node);
@@ -185,13 +188,16 @@ function FileRow({
             </button>
           )}
           {!isDir && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRename(node); }}
-              className="flex h-4 w-4 items-center justify-center rounded text-slate-600 hover:text-slate-300 transition-colors"
-              title="Yeniden adlandır"
-            >
-              <Pencil className="h-2.5 w-2.5" />
-            </button>
+            <>
+              <DownloadFileButton projectId={bucket} fileKey={node.key} fileName={node.name} />
+              <button
+                onClick={(e) => { e.stopPropagation(); onRename(node); }}
+                className="flex h-4 w-4 items-center justify-center rounded text-slate-600 hover:text-slate-300 transition-colors"
+                title="Yeniden adlandır"
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </button>
+            </>
           )}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(node); }}

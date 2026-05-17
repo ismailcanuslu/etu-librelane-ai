@@ -154,7 +154,7 @@ export default function MarkdownEditorPane({ tab, onUpdate }: MarkdownEditorPane
           <p className="mb-3 text-[10px] text-slate-500">
             Salt okunur önizleme — düzenlemek için Ham metin sekmesine geçin.
           </p>
-          <MarkdownContent content={tab.content || "_Boş dosya_"} />
+          <MarkdownContent content={tab.content || "_Boş dosya_"} variant="document" />
         </div>
       )}
     </div>
