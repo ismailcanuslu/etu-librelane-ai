@@ -227,7 +227,7 @@ export default function WorkspaceTerminal({
     setForceResetting(true);
     setShellError(null);
     try {
-      for (const tab of visibleShellTabs) {
+      for (const tab of visibleJobTabs) {
         if (!tab.finishedAt) {
           try {
             await cancel(tab.jobId);
