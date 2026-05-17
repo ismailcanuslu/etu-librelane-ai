@@ -43,6 +43,11 @@ export interface ChatAttachmentRef {
   key: string;
   name: string;
   type: "file" | "dir";
+  /** Dosya editöründen seçilen satır aralığı (1 tabanlı, dahil). */
+  lineStart?: number;
+  lineEnd?: number;
+  /** Seçilen metin; gönderimde öncelikli kullanılır. */
+  snippet?: string;
 }
 
 export interface Message {
@@ -95,7 +100,7 @@ export function toolRunTabKey(action: string, runId: string): string {
   return `__tool_run__:${action}:${runId}`;
 }
 
-export type EditorTabKind = "file" | "ollama-settings" | "tool-run";
+export type EditorTabKind = "file" | "ollama-settings" | "tool-run" | "gds-viewer";
 
 export interface PdkRuntimeInfo {
   pdk_family: string;
@@ -121,6 +126,8 @@ export interface RunPreview {
   container_workdir: string;
   pdk: PdkRuntimeInfo;
   input_files: string[];
+  /** Önizleme anında önerilen varsayılan seçim */
+  default_input_files?: string[];
   output_hints: string[];
   warnings: string[];
   requires_pdk: boolean;
@@ -132,6 +139,8 @@ export interface ToolRunTabState {
   runId: string;
   preview: RunPreview;
   jobId?: string;
+  /** Kullanıcının onayladığı / düzenlediği workspace dosya listesi */
+  selectedInputFiles?: string[];
 }
 
 export interface FileTab {
@@ -233,6 +242,8 @@ export function isTextFile(ext?: string): boolean {
   if (!ext) return false;
   return TEXT_EXTENSIONS.has(ext.toLowerCase());
 }
+
+export { isGdsFile, gdsViewerTabKey } from "@/lib/gds-file";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 

@@ -37,7 +37,8 @@ import {
   connectAiAgent,
   type AiAgentStatus,
 } from "@/lib/ai-client";
-import { buildMessageWithAttachments } from "@/lib/chat-attachments";
+import { buildMessageWithAttachments, chatAttachmentId } from "@/lib/chat-attachments";
+import { ADD_CHAT_SELECTION_EVENT, type AddChatSelectionDetail } from "@/lib/workspace-events";
 import { fetchChatHistory, putChatHistory } from "@/lib/chat-history-api";
 import { cn } from "@/lib/utils";
 
@@ -331,17 +332,32 @@ export default function AgentPanel({
   }
 
   function addAttachment(attachment: ChatAttachmentRef) {
+    const id = chatAttachmentId(attachment);
     setAttachments((prev) => {
-      if (prev.some((item) => item.key === attachment.key && item.type === attachment.type)) {
-        return prev;
-      }
+      if (prev.some((item) => chatAttachmentId(item) === id)) return prev;
       return [...prev, attachment];
     });
   }
 
-  function removeAttachment(key: string) {
-    setAttachments((prev) => prev.filter((item) => item.key !== key));
+  function removeAttachment(id: string) {
+    setAttachments((prev) => prev.filter((item) => chatAttachmentId(item) !== id));
   }
+
+  useEffect(() => {
+    function onAddSelection(e: Event) {
+      const detail = (e as CustomEvent<AddChatSelectionDetail>).detail;
+      if (!detail?.attachment) return;
+      setTab("chat");
+      const attachment = detail.attachment;
+      const id = chatAttachmentId(attachment);
+      setAttachments((prev) => {
+        if (prev.some((item) => chatAttachmentId(item) === id)) return prev;
+        return [...prev, attachment];
+      });
+    }
+    window.addEventListener(ADD_CHAT_SELECTION_EVENT, onAddSelection);
+    return () => window.removeEventListener(ADD_CHAT_SELECTION_EVENT, onAddSelection);
+  }, []);
 
   function handlePlanEdit() {
     if (!pendingPlan) return;

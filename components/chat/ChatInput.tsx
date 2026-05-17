@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Send, Loader2, X, Folder, File, Bot, ListTree } from "lucide-react";
+import { Send, Loader2, Bot, ListTree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChatAttachmentRef, ChatMode } from "@/lib/types";
+import { chatAttachmentId } from "@/lib/chat-attachments";
 import { readWorkspaceAttachment, WORKSPACE_ATTACHMENT_MIME } from "@/lib/workspace-drag";
+import ChatAttachmentChip from "./ChatAttachmentChip";
 
 interface ChatInputProps {
   onSend: (message: string, attachments: ChatAttachmentRef[]) => void;
@@ -117,25 +119,12 @@ export default function ChatInput({
       {attachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {attachments.map((attachment) => (
-            <span
-              key={`${attachment.type}:${attachment.key}`}
-              className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-slate-300"
-            >
-              {attachment.type === "dir" ? (
-                <Folder className="h-3 w-3 text-amber-400" />
-              ) : (
-                <File className="h-3 w-3 text-sky-400" />
-              )}
-              <span className="max-w-[160px] truncate">{attachment.name}</span>
-              <button
-                type="button"
-                onClick={() => onRemoveAttachment(attachment.key)}
-                className="text-slate-500 hover:text-slate-200"
-                title="Eki kaldır"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </span>
+            <ChatAttachmentChip
+              key={chatAttachmentId(attachment)}
+              attachment={attachment}
+              variant="input"
+              onRemove={() => onRemoveAttachment(chatAttachmentId(attachment))}
+            />
           ))}
         </div>
       )}

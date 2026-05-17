@@ -4,11 +4,14 @@ import { useEffect, useCallback, useRef } from "react";
 import { X, Save, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileTab } from "@/lib/types";
-import { isMarkdownFile } from "@/lib/types";
+import { isGdsFile, isMarkdownFile } from "@/lib/types";
+import GdsViewerPane from "@/components/editor/GdsViewerPane";
 import { isOpenlaneConfigFile } from "@/lib/openlane-config-io";
 import { FileAPI } from "@/lib/api";
 import MarkdownEditorPane from "@/components/editor/MarkdownEditorPane";
 import OpenlaneConfigEditorPane from "@/components/editor/OpenlaneConfigEditorPane";
+import CodeMirrorEditorPane from "@/components/editor/CodeMirrorEditorPane";
+import { isSyntaxHighlightedEditorFile } from "@/lib/editor-chat";
 
 interface FileEditorTabsProps {
   tabs: FileTab[];
@@ -182,6 +185,14 @@ export default function FileEditorTabs({
 
   const loadTab = useCallback(
     async (tab: FileTab) => {
+      if (tab.kind === "gds-viewer" || tab.kind === "tool-run" || tab.kind === "ollama-settings") {
+        loadedKeys.current.add(tab.key);
+        return;
+      }
+      if (isGdsFile(tab.key, tab.name.split(".").pop())) {
+        loadedKeys.current.add(tab.key);
+        return;
+      }
       // Skip if already loading or already loaded (loaded = success OR error)
       if (loadingKeys.current.has(tab.key) || loadedKeys.current.has(tab.key)) return;
       loadingKeys.current.add(tab.key);
@@ -270,7 +281,9 @@ export default function FileEditorTabs({
 
       {/* Active pane */}
       {activeTab ? (
-        errorKeys.current.has(activeTab.key) ? (
+        activeTab.kind === "gds-viewer" || isGdsFile(activeTab.key, activeTab.name.split(".").pop()) ? (
+          <GdsViewerPane key={activeTab.key} tab={activeTab} />
+        ) : errorKeys.current.has(activeTab.key) ? (
           <ErrorPane message={errorKeys.current.get(activeTab.key)!} />
         ) : loadingKeys.current.has(activeTab.key) || !loadedKeys.current.has(activeTab.key) ? (
           <LoadingPane />
@@ -282,6 +295,12 @@ export default function FileEditorTabs({
           />
         ) : isMarkdownFile(activeTab.key) ? (
           <MarkdownEditorPane
+            key={activeTab.key}
+            tab={activeTab}
+            onUpdate={(patch) => onTabUpdate(activeTab.key, patch)}
+          />
+        ) : isSyntaxHighlightedEditorFile(activeTab.key, activeTab.name.split(".").pop()) ? (
+          <CodeMirrorEditorPane
             key={activeTab.key}
             tab={activeTab}
             onUpdate={(patch) => onTabUpdate(activeTab.key, patch)}

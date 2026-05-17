@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Brain, ChevronDown, Cpu, MessageSquare, User, Folder, File } from "lucide-react";
+import { Brain, ChevronDown, Cpu, MessageSquare, User } from "lucide-react";
 import MarkdownContent from "./MarkdownContent";
+import ChatAttachmentChip from "./ChatAttachmentChip";
+import { chatAttachmentId } from "@/lib/chat-attachments";
 
 interface MessageListProps {
   messages: Message[];
@@ -192,20 +194,11 @@ export default function MessageList({ messages, projectName }: MessageListProps)
             {msg.attachments && msg.attachments.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {msg.attachments.map((attachment) => (
-                  <span
-                    key={`${attachment.type}:${attachment.key}`}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px]",
-                      msg.role === "user" ? "bg-white/10 text-violet-50" : "bg-white/5 text-slate-300"
-                    )}
-                  >
-                    {attachment.type === "dir" ? (
-                      <Folder className="h-3 w-3" />
-                    ) : (
-                      <File className="h-3 w-3" />
-                    )}
-                    {attachment.name}
-                  </span>
+                  <ChatAttachmentChip
+                    key={chatAttachmentId(attachment)}
+                    attachment={attachment}
+                    variant={msg.role === "user" ? "message-user" : "message-assistant"}
+                  />
                 ))}
               </div>
             )}

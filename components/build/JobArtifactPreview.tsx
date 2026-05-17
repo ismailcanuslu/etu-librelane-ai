@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { FileAPI } from "@/lib/api";
+import { isGdsFile } from "@/lib/gds-file";
+import { FLOW_LAYOUT_PNG_NAME } from "@/lib/layout-preview-api";
 import { useActiveJob } from "@/lib/active-job-context";
 import VcdWaveformViewer from "@/components/viewer/VcdWaveformViewer";
 import GdsLayoutViewer from "@/components/viewer/GdsLayoutViewer";
@@ -20,6 +22,7 @@ export default function JobArtifactPreview({
   const jobTab = tabs.find((t) => t.jobId === jobId);
   const [vcdText, setVcdText] = useState<string | null>(null);
   const [gdsBuffer, setGdsBuffer] = useState<ArrayBuffer | null>(null);
+  const [flowPngUrl, setFlowPngUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,17 +32,35 @@ export default function JobArtifactPreview({
     if (!finished || !jobTab?.artifactsPrefix) {
       setVcdText(null);
       setGdsBuffer(null);
+      setFlowPngUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
       return;
     }
 
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setFlowPngUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
 
     void (async () => {
       try {
-        const objects = await FileAPI.listObjects(projectId, jobTab.artifactsPrefix!, true);
+        const jobRoot = jobTab.artifactsPrefix!.replace(/\/artifacts\/?$/, "/");
+        const [artifactObjects, jobRootObjects] = await Promise.all([
+          FileAPI.listObjects(projectId, jobTab.artifactsPrefix!, true),
+          FileAPI.listObjects(projectId, jobRoot, false),
+        ]);
+        const objects = [...jobRootObjects, ...artifactObjects];
+
         const vcdKey = objects.find((o) => o.key.toLowerCase().endsWith(".vcd"))?.key;
+        const flowPngKey =
+          action === "openlane1-flow"
+            ? objects.find((o) => o.key.endsWith(FLOW_LAYOUT_PNG_NAME))?.key
+            : undefined;
         const gdsKey = objects.find((o) => o.key.toLowerCase().endsWith(".gds"))?.key
           ?? objects.find((o) => o.key.toLowerCase().endsWith(".gdsii"))?.key;
 
@@ -55,7 +76,10 @@ export default function JobArtifactPreview({
           }
         }
 
-        if (gdsKey && action === "openlane1-flow") {
+        if (flowPngKey && !cancelled) {
+          const blob = await FileAPI.getObjectBlob(projectId, flowPngKey);
+          setFlowPngUrl(URL.createObjectURL(blob));
+        } else if (gdsKey && (action === "openlane1-flow" || isGdsFile(gdsKey))) {
           const blob = await FileAPI.getObjectBlob(projectId, gdsKey);
           const buf = await blob.arrayBuffer();
           if (!cancelled) setGdsBuffer(buf);
@@ -86,11 +110,28 @@ export default function JobArtifactPreview({
         </div>
       )}
       {error && <p className="text-[11px] text-rose-400">{error}</p>}
+      {flowPngUrl && (
+        <div className="space-y-2">
+          <p className="text-[10px] text-slate-500">
+            OpenLane Flow tamamlandı — sunucuda KLayout ile üretilen PNG (2560×1440). GDS dosya
+            ağacında <code className="text-slate-400">{FLOW_LAYOUT_PNG_NAME}</code> olarak da
+            durur.
+          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={flowPngUrl}
+            alt="KLayout layout önizleme (1440p)"
+            className="max-h-[min(70vh,640px)] w-full rounded-lg border border-white/10 object-contain bg-[#0a0f16]"
+          />
+        </div>
+      )}
       {vcdText && <VcdWaveformViewer vcdText={vcdText} />}
-      {gdsBuffer && <GdsLayoutViewer data={gdsBuffer} />}
-      {!loading && !vcdText && !gdsBuffer && (
+      {!flowPngUrl && gdsBuffer && (
+        <GdsLayoutViewer data={gdsBuffer} />
+      )}
+      {!loading && !vcdText && !gdsBuffer && !flowPngUrl && (
         <p className="text-[11px] text-slate-600">
-          Bu çalıştırma için tarayıcıda önizlenecek VCD/GDS bulunamadı. Log ve dosya ağacını
+          Bu çalıştırma için tarayıcıda önizlenecek VCD/GDS/PNG bulunamadı. Log ve dosya ağacını
           kontrol edin.
         </p>
       )}

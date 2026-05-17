@@ -12,7 +12,6 @@ import {
   Info,
   ArrowRight,
   Wrench,
-  FlaskConical,
   ScanSearch,
   Cpu,
   Gauge,
@@ -33,7 +32,7 @@ import { useActiveJob } from "@/lib/active-job-context";
 import { analyzeLog } from "@/lib/ai-client";
 import { FileAPI } from "@/lib/api";
 import { listJobs, getJobLog, listTools } from "@/lib/job-client";
-import { runToolWithPreview } from "@/lib/run-tool-with-preview";
+import { openToolRunPreview } from "@/lib/run-tool-with-preview";
 import PdkInfoBanner from "./PdkInfoBanner";
 import { BuildFlowStrip } from "./BuildFlowStrip";
 import { BUILD_FLOW_ORDER } from "@/lib/build-flow";
@@ -56,7 +55,6 @@ interface ActionCardSpec {
 const TOOL_GROUP_LABELS: Record<string, string> = {
   tools: "Test & Doğrulama",
   analysis: "Analiz & Raporlama",
-  openlane1: "OpenLane 1 Araçları",
 };
 
 const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText">> = {
@@ -69,11 +67,6 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
     icon: <ScanSearch className="h-4 w-4" />,
     color: "text-sky-400",
     infoText: "efabless/openlane imajında Yosys ile hiyerarşi ve okunabilirlik kontrolü.",
-  },
-  formal: {
-    icon: <FlaskConical className="h-4 w-4" />,
-    color: "text-violet-400",
-    infoText: "efabless/openlane imajında SymbiYosys (sby) bulunmuyor.",
   },
   simulation: {
     icon: <Play className="h-4 w-4" />,
@@ -98,7 +91,8 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
   "openlane1-flow": {
     icon: <GitBranch className="h-4 w-4" />,
     color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    infoText: "openlane/<design>/config.json + flow.tcl; design adı otomatik algılanır.",
+    infoText:
+      "Caravel: openlane/user_project_wrapper/config.json + flow.tcl. Önce user_module macro, sonra wrapper; tam çip için caravel/README.md.",
   },
   gdsii: {
     icon: <Package className="h-4 w-4" />,
@@ -247,7 +241,7 @@ function ActionRow({
   layout: "card" | "list";
   toolEnabled: boolean;
 }) {
-  const { tabs, active, start } = useActiveJob();
+  const { tabs, active } = useActiveJob();
   const [openInfo, setOpenInfo] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -269,7 +263,7 @@ function ActionRow({
     setError(null);
     setPending(true);
     try {
-      await runToolWithPreview(projectId, spec.id, start);
+      await openToolRunPreview(projectId, spec.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -302,12 +296,12 @@ function ActionRow({
       ) : pending ? (
         <>
           <Loader2 className="h-2.5 w-2.5 animate-spin" />
-          Başlatılıyor
+          Açılıyor
         </>
       ) : (
         <>
           <Play className="h-2.5 w-2.5" />
-          Çalıştır
+          Önizle
         </>
       )}
     </button>
@@ -374,7 +368,15 @@ function ActionRow({
 
 /* ─────────────────────────── Tabs ─────────────────────────── */
 
-function BuildTab({ projectName, projectId }: { projectName: string; projectId: string }) {
+function BuildTab({
+  projectName,
+  projectId,
+  onOpenWorkspaceFile,
+}: {
+  projectName: string;
+  projectId: string;
+  onOpenWorkspaceFile?: (key: string) => void;
+}) {
   const { enabled: enabledTools, tools, catalogError, catalogLoading } = useToolsCatalog();
   const buildCards = useMemo(() => {
     const byId = new Map(tools.map((t) => [t.id, t]));
@@ -393,6 +395,7 @@ function BuildTab({ projectName, projectId }: { projectName: string; projectId: 
         projectName={projectName}
         tools={tools}
         enabledTools={enabledTools}
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
       />
 
       {buildCards.map((opt) => (
@@ -969,7 +972,13 @@ export function AgentWorkflowBody({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {activeTab === "build" && <BuildTab projectName={projectName} projectId={projectId} />}
+      {activeTab === "build" && (
+        <BuildTab
+          projectName={projectName}
+          projectId={projectId}
+          onOpenWorkspaceFile={onOpenWorkspaceFile}
+        />
+      )}
       {activeTab === "tools" && <ToolsTab projectName={projectName} projectId={projectId} />}
       {activeTab === "analysis" && (
         <AnalysisTab

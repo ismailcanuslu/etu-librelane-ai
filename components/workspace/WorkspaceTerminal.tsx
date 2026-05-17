@@ -12,6 +12,7 @@ import {
   Loader2,
   X,
   Plus,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useActiveJob } from "@/lib/active-job-context";
@@ -94,7 +95,8 @@ export default function WorkspaceTerminal({
   onToggleCollapsed,
   onOpenWorkspaceFile,
 }: WorkspaceTerminalProps) {
-  const { tabs, activeTabId, active, setActiveTab, cancel, closeTab, clear } = useActiveJob();
+  const { tabs, activeTabId, active, setActiveTab, cancel, closeTab, clear, resetTerminal } =
+    useActiveJob();
   const visibleJobTabs = useMemo(
     () => (projectId ? tabs.filter((tab) => tab.projectId === projectId) : tabs),
     [projectId, tabs]
@@ -104,6 +106,7 @@ export default function WorkspaceTerminal({
   const [hostTerminal, setHostTerminal] = useState<HostTerminalStatus | null>(null);
   const [openingShell, setOpeningShell] = useState(false);
   const [shellError, setShellError] = useState<string | null>(null);
+  const [forceResetting, setForceResetting] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -219,6 +222,44 @@ export default function WorkspaceTerminal({
     }
   }, [hostTerminal, projectId]);
 
+  const handleForceReset = useCallback(async () => {
+    if (forceResetting) return;
+    setForceResetting(true);
+    setShellError(null);
+    try {
+      for (const tab of visibleShellTabs) {
+        if (!tab.finishedAt) {
+          try {
+            await cancel(tab.jobId);
+          } catch {
+            // ignore
+          }
+        }
+      }
+      for (const shell of visibleShellTabs) {
+        try {
+          await closeHostShellSession(shell.sessionId);
+        } catch {
+          // ignore
+        }
+      }
+      setShellTabs((prev) => (projectId ? prev.filter((t) => t.projectId !== projectId) : []));
+      setActiveSurface(null);
+      await resetTerminal(projectId);
+    } catch (error) {
+      setShellError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setForceResetting(false);
+    }
+  }, [
+    cancel,
+    forceResetting,
+    projectId,
+    resetTerminal,
+    visibleJobTabs,
+    visibleShellTabs,
+  ]);
+
   async function downloadLog() {
     if (!activeJob) return;
     try {
@@ -332,6 +373,22 @@ export default function WorkspaceTerminal({
             >
               {openingShell ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Plus className="h-2.5 w-2.5" />}
               Kabuk
+            </button>
+          )}
+          {(isLive || liveCount > 0 || visibleShellTabs.length > 0) && (
+            <button
+              type="button"
+              onClick={() => void handleForceReset()}
+              disabled={forceResetting}
+              className="flex h-6 items-center gap-1 rounded border border-amber-500/35 bg-amber-500/10 px-1.5 text-[10px] font-medium text-amber-200 hover:bg-amber-500/15 disabled:opacity-50"
+              title="Tüm job ve kabuk oturumlarını SIGINT ile iptal et, semaforu sıfırla"
+            >
+              {forceResetting ? (
+                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+              ) : (
+                <RotateCcw className="h-2.5 w-2.5" />
+              )}
+              Zorla yeniden başlat
             </button>
           )}
           {isLive && (

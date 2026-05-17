@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileNode } from "@/lib/types";
-import { buildFileTree, isTextFile } from "@/lib/types";
+import { buildFileTree, isGdsFile, isTextFile } from "@/lib/types";
 import { FileAPI } from "@/lib/api";
 import { WORKSPACE_REFRESH_EVENT } from "@/lib/workspace-events";
 import { encodeWorkspaceAttachment, WORKSPACE_ATTACHMENT_MIME } from "@/lib/workspace-drag";
@@ -115,7 +115,7 @@ function FileRow({
         style={{ paddingLeft: `${8 + depth * 12}px` }}
         onClick={() => {
           if (isDir) setOpen((v) => !v);
-          else if (isTextFile(node.ext)) onOpenFile(node);
+          else if (isTextFile(node.ext) || isGdsFile(node.key, node.ext)) onOpenFile(node);
         }}
         onDoubleClick={() => {
           if (!isDir) onOpenFile(node);

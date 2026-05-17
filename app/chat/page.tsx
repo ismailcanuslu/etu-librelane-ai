@@ -25,8 +25,8 @@ import {
   getProjects,
   saveActiveProjectId,
 } from "@/lib/store";
-import type { Project, FileTab, FileNode } from "@/lib/types";
-import { isTextFile, OLLAMA_SETTINGS_TAB_KEY, toolRunTabKey } from "@/lib/types";
+import type { Project, FileTab, FileNode, ToolRunTabState } from "@/lib/types";
+import { isGdsFile, isTextFile, OLLAMA_SETTINGS_TAB_KEY, toolRunTabKey } from "@/lib/types";
 import {
   OPEN_TOOL_RUN_TAB_EVENT,
   type OpenToolRunTabDetail,
@@ -170,6 +170,14 @@ function ChatWorkspaceLayout({
     }));
   }, []);
 
+  const handleToolRunChange = useCallback((runId: string, patch: Partial<ToolRunTabState>) => {
+    setFileTabs((prev) =>
+      prev.map((t) =>
+        t.toolRun?.runId === runId ? { ...t, toolRun: { ...t.toolRun!, ...patch } } : t
+      )
+    );
+  }, []);
+
   const openToolRunTab = useCallback((detail: OpenToolRunTabDetail) => {
     const key = toolRunTabKey(detail.action, detail.runId);
     const tabLabel = detail.jobId
@@ -190,6 +198,10 @@ function ChatWorkspaceLayout({
           runId: detail.runId,
           preview: detail.preview,
           jobId: detail.jobId,
+          selectedInputFiles:
+            detail.selectedInputFiles ??
+            detail.preview.default_input_files ??
+            detail.preview.input_files,
         },
       };
       if (existing) {
@@ -241,6 +253,24 @@ function ChatWorkspaceLayout({
   }, []);
 
   const handleOpenFile = useCallback((node: FileNode, bucket: string) => {
+    if (isGdsFile(node.key, node.ext)) {
+      setFileTabs((prev) => {
+        if (prev.some((t) => t.key === node.key)) return prev;
+        return [
+          ...prev,
+          {
+            kind: "gds-viewer",
+            key: node.key,
+            bucket,
+            name: node.name,
+            content: "",
+            dirty: false,
+          },
+        ];
+      });
+      setActiveFileKey(node.key);
+      return;
+    }
     if (!isTextFile(node.ext)) return;
 
     setFileTabs((prev) => {
@@ -339,6 +369,9 @@ function ChatWorkspaceLayout({
                 <ToolRunPreviewEditor
                   toolRun={activeTab.toolRun}
                   onOpenFile={handleOpenWorkspaceFile}
+                  onToolRunChange={(patch) =>
+                    handleToolRunChange(activeTab.toolRun!.runId, patch)
+                  }
                 />
               ) : (
                 <FileEditorTabs

@@ -19,6 +19,7 @@ import {
   startJob,
   subscribeJob,
   cancelJob,
+  resetAllRunnerJobs,
   type JobSubscription,
 } from "./job-client";
 import { requestWorkspaceRefresh } from "./workspace-events";
@@ -46,12 +47,14 @@ interface ActiveJobContextValue {
   start: (
     projectId: string,
     action: string,
-    options?: { designName?: string; args?: string[] }
+    options?: { designName?: string; args?: string[]; inputFiles?: string[] }
   ) => Promise<{ job_id: string }>;
   attach: (jobId: string, projectId: string, action: string) => Promise<void>;
   cancel: (jobId?: string) => Promise<void>;
   closeTab: (jobId: string) => Promise<void>;
   clear: () => Promise<void>;
+  /** SIGINT + semafor sifirla; tum terminal sekmelerini temizler */
+  resetTerminal: (projectId?: string) => Promise<void>;
 }
 
 const ActiveJobContext = createContext<ActiveJobContextValue | null>(null);
@@ -213,7 +216,7 @@ export function ActiveJobProvider({
     async (
       projectId: string,
       action: string,
-      options?: { designName?: string; args?: string[] }
+      options?: { designName?: string; args?: string[]; inputFiles?: string[] }
     ) => {
       const res = await startJob(projectId, action, options);
       openTab(res.job_id, projectId, action);
@@ -287,6 +290,34 @@ export function ActiveJobProvider({
     await closeTab(activeTabId);
   }, [activeTabId, closeTab]);
 
+  const resetTerminal = useCallback(
+    async (scopeProjectId?: string) => {
+      const scope = scopeProjectId ?? projectId;
+      const live = tabsRef.current.filter((tab) => !tab.finishedAt);
+      for (const tab of live) {
+        try {
+          await cancelJob(tab.jobId);
+        } catch {
+          // ignore
+        }
+        teardown(tab.jobId);
+        try {
+          await closeTerminalTab(tab.jobId);
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        await resetAllRunnerJobs(scope);
+      } catch {
+        // backend kapali olabilir; yine de UI temizlensin
+      }
+      setTabs([]);
+      setActiveTabId(null);
+    },
+    [projectId, teardown]
+  );
+
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
@@ -336,8 +367,9 @@ export function ActiveJobProvider({
       cancel,
       closeTab,
       clear,
+      resetTerminal,
     }),
-    [tabs, activeTabId, active, setActiveTab, start, attach, cancel, closeTab, clear]
+    [tabs, activeTabId, active, setActiveTab, start, attach, cancel, closeTab, clear, resetTerminal]
   );
 
   return <ActiveJobContext.Provider value={value}>{children}</ActiveJobContext.Provider>;

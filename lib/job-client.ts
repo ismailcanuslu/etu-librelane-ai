@@ -87,16 +87,18 @@ export async function fetchRunPreview(
 export async function startJob(
   projectId: string,
   action: string,
-  options?: { designName?: string; args?: string[] }
+  options?: { designName?: string; args?: string[]; inputFiles?: string[] }
 ): Promise<{ job_id: string }> {
   const body: {
     project_id: string;
     action: string;
     design_name?: string;
     args?: string[];
+    input_files?: string[];
   } = { project_id: projectId, action };
   if (options?.designName) body.design_name = options.designName;
   if (options?.args?.length) body.args = options.args;
+  if (options?.inputFiles?.length) body.input_files = options.inputFiles;
 
   const res = await fetch(`${RUN_BASE}`, {
     method: "POST",
@@ -104,6 +106,17 @@ export async function startJob(
     body: JSON.stringify(body),
   });
   return asJsonOrThrow<{ job_id: string }>(res);
+}
+
+export async function resetAllRunnerJobs(
+  projectId?: string
+): Promise<{ ok: boolean; cancelled_jobs: number; killed_containers: number }> {
+  const res = await fetch(`${RUN_BASE}/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(projectId ? { project_id: projectId } : {}),
+  });
+  return asJsonOrThrow(res);
 }
 
 export async function cancelJob(jobId: string): Promise<{ cancelled: boolean }> {

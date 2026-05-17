@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { isValidElement, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import SyntaxCodeBlock from "./SyntaxCodeBlock";
 
 interface MarkdownContentProps {
   content: string;
@@ -24,56 +24,17 @@ function extractText(node: ReactNode): string {
   return "";
 }
 
-function CodeBlock({ children, className }: { children: ReactNode; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  const code = extractText(children).replace(/\n$/, "");
-
-  const onCopy = useCallback(async () => {
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // clipboard izni yoksa sessizce gec
-    }
-  }, [code]);
-
-  return (
-    <div className="group relative my-2 max-w-full">
-      <div className="flex items-center justify-between gap-2 rounded-t-lg border border-b-0 border-white/10 bg-[#161b22] px-3 py-1.5">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Kod</span>
-        <button
-          type="button"
-          onClick={() => void onCopy()}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
-          aria-label="Kodu kopyala"
-          title="Kopyala"
-        >
-          {copied ? (
-            <>
-              <Check className="h-3 w-3 text-emerald-400" />
-              <span className="text-emerald-400/90">Kopyalandı</span>
-            </>
-          ) : (
-            <>
-              <Copy className="h-3 w-3" />
-              <span className="hidden sm:inline">Kopyala</span>
-            </>
-          )}
-        </button>
-      </div>
-      <pre
-        className={cn(
-          "max-w-full overflow-x-auto rounded-b-lg border border-white/10 bg-[#0d1117] p-3",
-          "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
-          className
-        )}
-      >
-        {children}
-      </pre>
-    </div>
-  );
+function parseFenceFromCodeChild(children: ReactNode): { code: string; language: string | null } {
+  if (!isValidElement(children)) {
+    return { code: extractText(children).replace(/\n$/, ""), language: null };
+  }
+  const props = children.props as { className?: string; children?: ReactNode };
+  const className = props.className ?? "";
+  const match = /language-([\w+-]+)/.exec(className);
+  return {
+    code: extractText(props.children).replace(/\n$/, ""),
+    language: match?.[1] ?? null,
+  };
 }
 
 export default function MarkdownContent({
@@ -104,7 +65,32 @@ export default function MarkdownContent({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+          pre: ({ children }) => {
+            const { code, language } = parseFenceFromCodeChild(children);
+            if (!code) {
+              return (
+                <pre className="my-2 overflow-x-auto rounded-lg border border-white/10 bg-[#0d1117] p-3 text-[11px]">
+                  {children}
+                </pre>
+              );
+            }
+            return <SyntaxCodeBlock code={code} language={language} />;
+          },
+          code: ({ className: codeClass, children, ...props }) => {
+            const isFence = /language-/.test(codeClass ?? "");
+            if (isFence) {
+              return (
+                <code className={codeClass} {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code className={codeClass} {...props}>
+                {children}
+              </code>
+            );
+          },
           a: ({ href, children }) => (
             <a
               href={href}
