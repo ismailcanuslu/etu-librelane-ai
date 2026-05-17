@@ -27,6 +27,7 @@ import FileBrowser from "./FileBrowser";
 
 interface SidebarProps {
   activeProjectId: string;
+  width?: number;
   onProjectChange: (id: string) => void;
   onOpenFile: (node: FileNode, bucket: string) => void;
   onOpenOllamaSettings: () => void;
@@ -119,7 +120,13 @@ function bucketToDisplayName(bucket: string): string {
     .join(" ");
 }
 
-export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile, onOpenOllamaSettings }: SidebarProps) {
+export default function Sidebar({
+  activeProjectId,
+  width = 256,
+  onProjectChange,
+  onOpenFile,
+  onOpenOllamaSettings,
+}: SidebarProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [newProjectName, setNewProjectName] = useState("");
@@ -236,7 +243,10 @@ export default function Sidebar({ activeProjectId, onProjectChange, onOpenFile, 
         />
       )}
 
-      <aside className="flex h-full w-64 flex-col border-r border-white/8 bg-[#0d1117] overflow-hidden">
+      <aside
+        className="flex h-full flex-shrink-0 flex-col overflow-hidden border-r border-white/8 bg-[#0d1117]"
+        style={{ width }}
+      >
         <div className="flex items-center gap-2.5 px-4 py-4 flex-shrink-0">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg shadow-violet-500/20">
             <Cpu className="h-4 w-4 text-white" />

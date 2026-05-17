@@ -1,22 +1,36 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { PanelRightOpen, FileCode2 } from "lucide-react";
 import Sidebar from "@/components/sidebar/Sidebar";
 import FileEditorTabs from "@/components/editor/FileEditorTabs";
 import OllamaSettingsEditor from "@/components/settings/OllamaSettingsEditor";
+import ToolRunPreviewEditor from "@/components/build/ToolRunPreviewEditor";
 import AgentPanel from "@/components/workspace/AgentPanel";
 import WorkspaceTerminal from "@/components/workspace/WorkspaceTerminal";
+import ResizeHandle from "@/components/ui/ResizeHandle";
 import { TooltipProvider } from "@/components/ui/Tooltip";
 import { ActiveJobProvider, useActiveJob } from "@/lib/active-job-context";
 import { cn } from "@/lib/utils";
+import {
+  WORKSPACE_LAYOUT_DEFAULTS,
+  WORKSPACE_LAYOUT_LIMITS,
+  clamp,
+  loadWorkspaceLayout,
+  saveWorkspaceLayout,
+  type WorkspaceLayout,
+} from "@/lib/workspace-layout";
 import {
   getActiveProjectId,
   getProjects,
   saveActiveProjectId,
 } from "@/lib/store";
 import type { Project, FileTab, FileNode } from "@/lib/types";
-import { isTextFile, OLLAMA_SETTINGS_TAB_KEY } from "@/lib/types";
+import { isTextFile, OLLAMA_SETTINGS_TAB_KEY, toolRunTabKey } from "@/lib/types";
+import {
+  OPEN_TOOL_RUN_TAB_EVENT,
+  type OpenToolRunTabDetail,
+} from "@/lib/workspace-events";
 
 interface EditorTabBarProps {
   fileTabs: FileTab[];
@@ -48,7 +62,9 @@ function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }:
               : "bg-[#2d2d2d] text-slate-400 hover:bg-[#323232] hover:text-slate-200"
           )}
         >
-          <span className="truncate">{tab.name}</span>
+          <span className="truncate">
+            {tab.kind === "tool-run" ? `▶ ${tab.name}` : tab.name}
+          </span>
           {tab.dirty && <span className="flex-shrink-0 text-[10px] text-amber-400">•</span>}
           <span
             role="button"
@@ -108,6 +124,92 @@ function ChatWorkspaceLayout({
   const [activeFileKey, setActiveFileKey] = useState<string | null>(null);
   const [fileTabs, setFileTabs] = useState<FileTab[]>([]);
   const [terminalCollapsed, setTerminalCollapsed] = useState(false);
+  const [layout, setLayout] = useState<WorkspaceLayout>(WORKSPACE_LAYOUT_DEFAULTS);
+  const layoutReady = useRef(false);
+
+  useEffect(() => {
+    setLayout(loadWorkspaceLayout());
+    layoutReady.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!layoutReady.current) return;
+    saveWorkspaceLayout(layout);
+  }, [layout]);
+
+  const resizeSidebar = useCallback((delta: number) => {
+    setLayout((prev) => ({
+      ...prev,
+      sidebarWidth: clamp(
+        prev.sidebarWidth + delta,
+        WORKSPACE_LAYOUT_LIMITS.sidebarWidth.min,
+        WORKSPACE_LAYOUT_LIMITS.sidebarWidth.max
+      ),
+    }));
+  }, []);
+
+  const resizeTerminal = useCallback((delta: number) => {
+    setLayout((prev) => ({
+      ...prev,
+      terminalHeight: clamp(
+        prev.terminalHeight + delta,
+        WORKSPACE_LAYOUT_LIMITS.terminalHeight.min,
+        WORKSPACE_LAYOUT_LIMITS.terminalHeight.max
+      ),
+    }));
+  }, []);
+
+  const resizeAgentPanel = useCallback((delta: number) => {
+    setLayout((prev) => ({
+      ...prev,
+      agentPanelWidth: clamp(
+        prev.agentPanelWidth + delta,
+        WORKSPACE_LAYOUT_LIMITS.agentPanelWidth.min,
+        WORKSPACE_LAYOUT_LIMITS.agentPanelWidth.max
+      ),
+    }));
+  }, []);
+
+  const openToolRunTab = useCallback((detail: OpenToolRunTabDetail) => {
+    const key = toolRunTabKey(detail.action, detail.runId);
+    const tabLabel = detail.jobId
+      ? `${detail.preview.label} · ${detail.jobId.slice(0, 8)}`
+      : detail.preview.label;
+    setFileTabs((prev) => {
+      const existing = prev.find((t) => t.key === key);
+      const tab: FileTab = {
+        kind: "tool-run",
+        key,
+        bucket: detail.projectId,
+        name: tabLabel,
+        content: "",
+        dirty: false,
+        toolRun: {
+          projectId: detail.projectId,
+          action: detail.action,
+          runId: detail.runId,
+          preview: detail.preview,
+          jobId: detail.jobId,
+        },
+      };
+      if (existing) {
+        return prev.map((t) => (t.key === key ? tab : t));
+      }
+      return [...prev, tab];
+    });
+    setActiveFileKey(key);
+    setTerminalCollapsed(false);
+  }, []);
+
+  useEffect(() => {
+    const onToolRun = (e: Event) => {
+      const detail = (e as CustomEvent<OpenToolRunTabDetail>).detail;
+      if (!detail?.projectId || !detail?.action || !detail?.preview || !detail?.runId) return;
+      openToolRunTab(detail);
+    };
+    window.addEventListener(OPEN_TOOL_RUN_TAB_EVENT, onToolRun);
+    return () => window.removeEventListener(OPEN_TOOL_RUN_TAB_EVENT, onToolRun);
+  }, [openToolRunTab]);
 
   useEffect(() => {
     const hasLive = tabs.some(
@@ -201,10 +303,13 @@ function ChatWorkspaceLayout({
     <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
       <Sidebar
         activeProjectId={activeProjectId}
+        width={layout.sidebarWidth}
         onProjectChange={onProjectChange}
         onOpenFile={handleOpenFile}
         onOpenOllamaSettings={handleOpenOllamaSettings}
       />
+
+      <ResizeHandle direction="horizontal" onResize={resizeSidebar} />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
         {!agentOpen && (
@@ -230,9 +335,16 @@ function ChatWorkspaceLayout({
             {fileTabs.length > 0 && activeFileKey ? (
               activeTab?.kind === "ollama-settings" ? (
                 <OllamaSettingsEditor onDirtyChange={handleOllamaDirtyChange} />
+              ) : activeTab?.kind === "tool-run" && activeTab.toolRun ? (
+                <ToolRunPreviewEditor
+                  toolRun={activeTab.toolRun}
+                  onOpenFile={handleOpenWorkspaceFile}
+                />
               ) : (
                 <FileEditorTabs
-                  tabs={fileTabs.filter((t) => t.kind !== "ollama-settings")}
+                  tabs={fileTabs.filter(
+                    (t) => t.kind !== "ollama-settings" && t.kind !== "tool-run"
+                  )}
                   activeKey={activeFileKey}
                   onTabChange={setActiveFileKey}
                   onTabClose={handleTabClose}
@@ -245,11 +357,16 @@ function ChatWorkspaceLayout({
             )}
           </div>
 
+          {!terminalCollapsed && (
+            <ResizeHandle direction="vertical" invert onResize={resizeTerminal} />
+          )}
+
           <div
             className={cn(
-              "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10 transition-[height,max-height] duration-200",
-              terminalCollapsed ? "h-auto" : "h-[min(32vh,240px)] max-h-[320px]"
+              "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10",
+              terminalCollapsed && "h-auto"
             )}
+            style={terminalCollapsed ? undefined : { height: layout.terminalHeight }}
           >
             <WorkspaceTerminal
               projectId={activeProjectId}
@@ -261,11 +378,16 @@ function ChatWorkspaceLayout({
         </div>
       </div>
 
+      {agentOpen && (
+        <ResizeHandle direction="horizontal" invert onResize={resizeAgentPanel} />
+      )}
+
       <div
         className={cn(
-          "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10 transition-[width,min-width] duration-200 ease-out",
-          agentOpen ? "w-[min(420px,100vw)] min-w-[280px]" : "w-0 min-w-0 border-l-0"
+          "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10",
+          !agentOpen && "w-0 min-w-0 border-l-0"
         )}
+        style={agentOpen ? { width: layout.agentPanelWidth } : undefined}
       >
         {agentOpen && (
           <AgentPanel

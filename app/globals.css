@@ -9,6 +9,11 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Orantılı küçültme: Tailwind rem ölçekleri korunur, tasarım oranları değişmez */
+  font-size: 87.5%;
+}
+
 html,
 body {
   height: 100%;
@@ -24,13 +29,16 @@ body {
   width: 4px;
   height: 4px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
   background: rgba(148, 163, 184, 0.15);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.3);
 }

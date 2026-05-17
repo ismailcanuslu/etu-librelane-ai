@@ -13,7 +13,23 @@ import {
 } from "lucide-react";
 import ChatThread from "@/components/chat/ChatThread";
 import { AgentWorkflowBody, type AgentWorkflowTab } from "@/components/build/RightPanel";
-import type { ChatAttachmentRef, Message } from "@/lib/types";
+import type {
+  ChatAttachmentRef,
+  ChatMode,
+  Message,
+  PendingFileChanges,
+  PendingPlan,
+} from "@/lib/types";
+import { parseAiFileBlocks } from "@/lib/parse-ai-files";
+import { applyApprovedFileChanges, resolveProposedFileChanges } from "@/lib/ai-file-changes";
+import { FileAPI } from "@/lib/api";
+import {
+  buildPlanObjectKey,
+  planFileDisplayName,
+  PLAN_APPROVE_PROMPT_PREFIX,
+  savePlanToWorkspace,
+} from "@/lib/plan-workspace";
+import { requestWorkspaceRefresh } from "@/lib/workspace-events";
 import {
   onLateChatReply,
   sendChatMessage,
@@ -89,11 +105,21 @@ export default function AgentPanel({
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<ChatAttachmentRef[]>([]);
   const [streamPreview, setStreamPreview] = useState<{ thinking?: string; content?: string } | null>(null);
+  const [chatMode, setChatMode] = useState<ChatMode>("agent");
+  const [pendingPlan, setPendingPlan] = useState<PendingPlan | null>(null);
+  const [pendingFileChanges, setPendingFileChanges] = useState<PendingFileChanges | null>(null);
+  const [planActionBusy, setPlanActionBusy] = useState(false);
+  const [fileChangeBusy, setFileChangeBusy] = useState(false);
   const [agentStatus, setAgentStatus] = useState<AiAgentStatus>({
     phase: "connecting",
     message: "Ollama servisi kontrol ediliyor...",
     model: "Ollama",
   });
+
+  useEffect(() => {
+    setPendingPlan(null);
+    setPendingFileChanges(null);
+  }, [projectId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +169,7 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        void putChatHistory(projectId, withReply).catch(() => {});
+        void putChatHistory(projectId, withReply).catch(() => { });
         return withReply;
       });
     });
@@ -152,7 +178,41 @@ export default function AgentPanel({
     };
   }, [projectId]);
 
-  async function handleSend(content: string, nextAttachments: ChatAttachmentRef[]) {
+  async function queueFileChangesFromReply(assistantMessageId: string, replyText: string) {
+    const blocks = parseAiFileBlocks(replyText);
+    if (blocks.length === 0) return;
+
+    const files = await resolveProposedFileChanges(projectBucket, blocks);
+    if (files.length === 0) return;
+
+    setPendingFileChanges({
+      messageId: assistantMessageId,
+      files,
+      createdAt: new Date().toISOString(),
+    });
+    onOpenWorkspaceFile?.(files[0].path);
+  }
+
+  async function persistPlanFromReply(assistantMessageId: string, replyText: string) {
+    const planKey = buildPlanObjectKey();
+    const planName = planFileDisplayName(planKey);
+    await savePlanToWorkspace(projectBucket, planKey, replyText);
+    requestWorkspaceRefresh(projectBucket);
+    onOpenWorkspaceFile?.(planKey);
+    setPendingPlan({
+      messageId: assistantMessageId,
+      planKey,
+      planName,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  async function handleSend(
+    content: string,
+    nextAttachments: ChatAttachmentRef[],
+    modeOverride?: ChatMode
+  ) {
+    const effectiveMode = modeOverride ?? chatMode;
     const userMsg: Message = {
       id: `msg-${Date.now()}-u`,
       role: "user",
@@ -164,11 +224,12 @@ export default function AgentPanel({
     setMessages((prev) => {
       const withUser = [...prev, userMsg];
       historyForApi = withUser;
-      void putChatHistory(projectId, withUser).catch(() => {});
+      void putChatHistory(projectId, withUser).catch(() => { });
       return withUser;
     });
     setAttachments([]);
     setStreamPreview(null);
+    setPendingFileChanges(null);
     setIsLoading(true);
 
     try {
@@ -185,6 +246,7 @@ export default function AgentPanel({
         outbound,
         historyForApi.slice(0, -1).map((msg) => ({ role: msg.role, content: msg.content })),
         {
+          mode: effectiveMode,
           onPartial: (p) => {
             setStreamPreview((prev) => ({ ...prev, ...p }));
           },
@@ -199,9 +261,43 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        void putChatHistory(projectId, withReply).catch(() => {});
+        void putChatHistory(projectId, withReply).catch(() => { });
         return withReply;
       });
+
+      if (effectiveMode === "agent" && replyText.trim()) {
+        try {
+          await queueFileChangesFromReply(assistantMsg.id, replyText);
+        } catch (err) {
+          const errMsg: Message = {
+            id: `msg-${Date.now()}-files-err`,
+            role: "assistant",
+            content: `Dosya önerileri işlenemedi: ${err instanceof Error ? err.message : String(err)}`,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => {
+            const withErr = [...prev, errMsg];
+            void putChatHistory(projectId, withErr).catch(() => { });
+            return withErr;
+          });
+        }
+      } else if (effectiveMode === "plan" && replyText.trim()) {
+        try {
+          await persistPlanFromReply(assistantMsg.id, replyText);
+        } catch (err) {
+          const errMsg: Message = {
+            id: `msg-${Date.now()}-plan-err`,
+            role: "assistant",
+            content: `Plan dosyası kaydedilemedi: ${err instanceof Error ? err.message : String(err)}`,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => {
+            const withErr = [...prev, errMsg];
+            void putChatHistory(projectId, withErr).catch(() => { });
+            return withErr;
+          });
+        }
+      }
     } catch (error) {
       const assistantMsg: Message = {
         id: `msg-${Date.now()}-a`,
@@ -211,7 +307,7 @@ export default function AgentPanel({
       };
       setMessages((prev) => {
         const withReply = [...prev, assistantMsg];
-        void putChatHistory(projectId, withReply).catch(() => {});
+        void putChatHistory(projectId, withReply).catch(() => { });
         return withReply;
       });
     } finally {
@@ -245,6 +341,101 @@ export default function AgentPanel({
 
   function removeAttachment(key: string) {
     setAttachments((prev) => prev.filter((item) => item.key !== key));
+  }
+
+  function handlePlanEdit() {
+    if (!pendingPlan) return;
+    onOpenWorkspaceFile?.(pendingPlan.planKey);
+  }
+
+  function handlePlanReject() {
+    setPendingPlan(null);
+    const note: Message = {
+      id: `msg-${Date.now()}-plan-reject`,
+      role: "assistant",
+      content:
+        "Plan reddedildi. Yeni bir plan isteyebilir veya **Agent** modunda doğrudan devam edebilirsiniz.",
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => {
+      const next = [...prev, note];
+      void putChatHistory(projectId, next).catch(() => { });
+      return next;
+    });
+  }
+
+  async function handleFileChangesApprove(paths: string[]) {
+    if (!pendingFileChanges || fileChangeBusy || paths.length === 0) return;
+    setFileChangeBusy(true);
+    try {
+      await applyApprovedFileChanges(projectBucket, pendingFileChanges.files, paths);
+      const note: Message = {
+        id: `msg-${Date.now()}-files-applied`,
+        role: "assistant",
+        content: `✅ ${paths.length} dosya güncellendi: ${paths.map((p) => `\`${p}\``).join(", ")}`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => {
+        const next = [...prev, note];
+        void putChatHistory(projectId, next).catch(() => { });
+        return next;
+      });
+      setPendingFileChanges(null);
+    } catch (err) {
+      const errMsg: Message = {
+        id: `msg-${Date.now()}-files-apply-err`,
+        role: "assistant",
+        content: `Dosyalar yazılamadı: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => {
+        const next = [...prev, errMsg];
+        void putChatHistory(projectId, next).catch(() => { });
+        return next;
+      });
+    } finally {
+      setFileChangeBusy(false);
+    }
+  }
+
+  function handleFileChangesReject() {
+    setPendingFileChanges(null);
+    const note: Message = {
+      id: `msg-${Date.now()}-files-reject`,
+      role: "assistant",
+      content: "Dosya değişiklikleri reddedildi; diske yazılmadı.",
+      timestamp: new Date().toISOString(),
+    };
+    setMessages((prev) => {
+      const next = [...prev, note];
+      void putChatHistory(projectId, next).catch(() => { });
+      return next;
+    });
+  }
+
+  async function handlePlanApprove() {
+    if (!pendingPlan || planActionBusy) return;
+    setPlanActionBusy(true);
+    try {
+      const content = await FileAPI.getObjectText(projectBucket, pendingPlan.planKey);
+      setPendingPlan(null);
+      setChatMode("agent");
+      await handleSend(`${PLAN_APPROVE_PROMPT_PREFIX}${content.trim()}`, [], "agent");
+    } catch (err) {
+      const errMsg: Message = {
+        id: `msg-${Date.now()}-plan-approve-err`,
+        role: "assistant",
+        content: `Plan onayı başarısız: ${err instanceof Error ? err.message : String(err)}`,
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => {
+        const next = [...prev, errMsg];
+        void putChatHistory(projectId, next).catch(() => { });
+        return next;
+      });
+    } finally {
+      setPlanActionBusy(false);
+    }
   }
 
   return (
@@ -294,10 +485,21 @@ export default function AgentPanel({
               projectName={projectName}
               isLoading={isLoading}
               streamPreview={streamPreview}
+              chatMode={chatMode}
+              onChatModeChange={setChatMode}
               attachments={attachments}
               onAddAttachment={addAttachment}
               onRemoveAttachment={removeAttachment}
               onSend={(content, sentAttachments) => void handleSend(content, sentAttachments)}
+              pendingPlan={pendingPlan}
+              onPlanApprove={() => void handlePlanApprove()}
+              onPlanEdit={handlePlanEdit}
+              onPlanReject={handlePlanReject}
+              planActionBusy={planActionBusy}
+              pendingFileChanges={pendingFileChanges}
+              onFileChangesApprove={(paths) => void handleFileChangesApprove(paths)}
+              onFileChangesReject={handleFileChangesReject}
+              fileChangeBusy={fileChangeBusy}
             />
           </>
         ) : (

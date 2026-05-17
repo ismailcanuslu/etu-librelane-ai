@@ -10,8 +10,16 @@ import type {
   JobLineEvent,
   JobStatus,
   JobStatusEvent,
+  RunPreview,
   ToolSpec,
 } from "./types";
+
+export interface EdaRuntimeInfo {
+  pdk: RunPreview["pdk"];
+  workspace_root: string;
+  jobs_host_dir: string;
+  runner_image_openlane: string;
+}
 
 const RUN_BASE = "/api/run";
 const JOBS_BASE = "/api/jobs";
@@ -60,6 +68,20 @@ export async function listTools(): Promise<ToolSpec[]> {
   const res = await fetch(TOOLS_BASE, { cache: "no-store" });
   const data = await asJsonOrThrow<{ tools: ToolSpec[] }>(res);
   return data.tools ?? [];
+}
+
+export async function fetchEdaRuntime(): Promise<EdaRuntimeInfo> {
+  const res = await fetch(`${TOOLS_BASE}/runtime`, { cache: "no-store" });
+  return asJsonOrThrow<EdaRuntimeInfo>(res);
+}
+
+export async function fetchRunPreview(
+  projectId: string,
+  action: string
+): Promise<RunPreview> {
+  const params = new URLSearchParams({ project_id: projectId, action });
+  const res = await fetch(`${TOOLS_BASE}/preview?${params}`, { cache: "no-store" });
+  return asJsonOrThrow<RunPreview>(res);
 }
 
 export async function startJob(

@@ -36,6 +36,9 @@ export interface FileNode {
 
 export type Role = "user" | "assistant";
 
+/** Sohbet modu: agent = doğrudan yardım, plan = adım adım plan üret */
+export type ChatMode = "agent" | "plan";
+
 export interface ChatAttachmentRef {
   key: string;
   name: string;
@@ -52,6 +55,29 @@ export interface Message {
   thinking?: string;
 }
 
+/** Plan modu yanıtı diske yazıldıktan sonra onay bekleyen kayıt. */
+export interface PendingPlan {
+  messageId: string;
+  planKey: string;
+  planName: string;
+  createdAt: string;
+}
+
+/** AI önerisi — henüz diske yazılmamış tek dosya değişikliği. */
+export interface ProposedFileChange {
+  path: string;
+  oldContent: string;
+  newContent: string;
+  isNew: boolean;
+}
+
+/** Agent yanıtındaki dosya blokları için diff onayı. */
+export interface PendingFileChanges {
+  messageId: string;
+  files: ProposedFileChange[];
+  createdAt: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -64,16 +90,59 @@ export interface Project {
 
 export const OLLAMA_SETTINGS_TAB_KEY = "__ollama_settings__";
 
-export type EditorTabKind = "file" | "ollama-settings";
+/** Her çalıştırma için benzersiz sekme (aynı araç tekrar çalışınca yeni sekme). */
+export function toolRunTabKey(action: string, runId: string): string {
+  return `__tool_run__:${action}:${runId}`;
+}
+
+export type EditorTabKind = "file" | "ollama-settings" | "tool-run";
+
+export interface PdkRuntimeInfo {
+  pdk_family: string;
+  source: "host_mount" | "runner_image";
+  host_path: string | null;
+  container_path: string;
+  available: boolean;
+  message: string;
+}
+
+export interface RunPreview {
+  action: string;
+  label: string;
+  description: string;
+  project_id: string;
+  design_name: string | null;
+  image: string;
+  command: string[];
+  command_display: string;
+  workspace_root: string;
+  project_path: string;
+  job_workspace_template: string;
+  container_workdir: string;
+  pdk: PdkRuntimeInfo;
+  input_files: string[];
+  output_hints: string[];
+  warnings: string[];
+  requires_pdk: boolean;
+}
+
+export interface ToolRunTabState {
+  projectId: string;
+  action: string;
+  runId: string;
+  preview: RunPreview;
+  jobId?: string;
+}
 
 export interface FileTab {
-  /** Dosya dışı sekmeler (ör. Ollama ayarları). */
+  /** Dosya dışı sekmeler (ör. Ollama ayarları, araç çalıştırma önizlemesi). */
   kind?: EditorTabKind;
   key: string;
   bucket: string;
   name: string;
   content: string;
   dirty: boolean;
+  toolRun?: ToolRunTabState;
 }
 
 // ─── Job runner ──────────────────────────────────────────────────────────────
@@ -163,6 +232,16 @@ export const TEXT_EXTENSIONS = new Set([
 export function isTextFile(ext?: string): boolean {
   if (!ext) return false;
   return TEXT_EXTENSIONS.has(ext.toLowerCase());
+}
+
+const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
+
+export { isOpenlaneConfigFile } from "@/lib/openlane-config-io";
+
+export function isMarkdownFile(nameOrKey: string, ext?: string): boolean {
+  const e = (ext ?? nameOrKey.split(".").pop() ?? "").toLowerCase();
+  if (MARKDOWN_EXTENSIONS.has(e)) return true;
+  return nameOrKey.toLowerCase().endsWith(".md") || nameOrKey.toLowerCase().endsWith(".markdown");
 }
 
 /**

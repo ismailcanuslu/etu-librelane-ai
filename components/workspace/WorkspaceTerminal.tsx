@@ -152,9 +152,9 @@ export default function WorkspaceTerminal({
 
   const isLive = Boolean(
     activeJob &&
-      !showingShell &&
-      !activeJob.finishedAt &&
-      (activeJob.status === "running" || activeJob.status === "preparing" || activeJob.status === "queued")
+    !showingShell &&
+    !activeJob.finishedAt &&
+    (activeJob.status === "running" || activeJob.status === "preparing" || activeJob.status === "queued")
   );
 
   const liveCount = visibleJobTabs.filter(

@@ -4,7 +4,11 @@ import { useEffect, useCallback, useRef } from "react";
 import { X, Save, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileTab } from "@/lib/types";
+import { isMarkdownFile } from "@/lib/types";
+import { isOpenlaneConfigFile } from "@/lib/openlane-config-io";
 import { FileAPI } from "@/lib/api";
+import MarkdownEditorPane from "@/components/editor/MarkdownEditorPane";
+import OpenlaneConfigEditorPane from "@/components/editor/OpenlaneConfigEditorPane";
 
 interface FileEditorTabsProps {
   tabs: FileTab[];
@@ -270,6 +274,18 @@ export default function FileEditorTabs({
           <ErrorPane message={errorKeys.current.get(activeTab.key)!} />
         ) : loadingKeys.current.has(activeTab.key) || !loadedKeys.current.has(activeTab.key) ? (
           <LoadingPane />
+        ) : isOpenlaneConfigFile(activeTab.key) ? (
+          <OpenlaneConfigEditorPane
+            key={activeTab.key}
+            tab={activeTab}
+            onUpdate={(patch) => onTabUpdate(activeTab.key, patch)}
+          />
+        ) : isMarkdownFile(activeTab.key) ? (
+          <MarkdownEditorPane
+            key={activeTab.key}
+            tab={activeTab}
+            onUpdate={(patch) => onTabUpdate(activeTab.key, patch)}
+          />
         ) : (
           <EditorPane
             key={activeTab.key}

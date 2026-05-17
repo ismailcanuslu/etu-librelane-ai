@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Brain, ChevronDown, Cpu, User, Folder, File } from "lucide-react";
+import MarkdownContent from "./MarkdownContent";
 
 interface MessageListProps {
   messages: Message[];
@@ -12,19 +13,6 @@ interface MessageListProps {
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function CodeBlock({ code, lang }: { code: string; lang?: string }) {
-  return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-white/10 bg-[#0d1117]">
-      {lang && (
-        <div className="flex items-center border-b border-white/8 px-3 py-1">
-          <span className="text-[10px] font-mono text-slate-500">{lang}</span>
-        </div>
-      )}
-      <pre className="overflow-x-auto p-3 text-xs text-slate-300 leading-relaxed font-mono">{code}</pre>
-    </div>
-  );
 }
 
 export function ThinkingBlock({
@@ -40,7 +28,7 @@ export function ThinkingBlock({
   const preview = text.trim().slice(0, 160).replace(/\s+/g, " ");
   const needsTruncate = text.trim().length > 160;
   return (
-    <div className="mb-2 overflow-hidden rounded-lg border border-violet-500/30 bg-violet-950/40">
+    <div className="mb-2 w-full min-w-0 overflow-hidden rounded-lg border border-violet-500/30 bg-violet-950/40">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -64,36 +52,19 @@ export function ThinkingBlock({
         </p>
       )}
       {open && (
-        <pre
-          className="max-h-[min(70vh,28rem)] overflow-auto border-t border-violet-500/25 px-3 py-3 font-sans text-[12px] leading-relaxed text-slate-100 whitespace-pre-wrap [scrollbar-color:rgba(139,92,246,0.5)_transparent]"
+        <div
+          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-violet-500/25 px-3 py-3 [scrollbar-color:rgba(139,92,246,0.5)_transparent]"
           title="Düşünce metni"
         >
-          {text}
-        </pre>
+          <MarkdownContent content={text} variant="thinking" />
+        </div>
       )}
     </div>
   );
 }
 
 function MessageContent({ content }: { content: string }) {
-  const parts = content.split(/(```[\s\S]*?```)/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith("```")) {
-          const lines = part.slice(3, -3).split("\n");
-          const lang = lines[0].trim();
-          const code = lines.slice(1).join("\n").trim();
-          return <CodeBlock key={i} code={code} lang={lang || undefined} />;
-        }
-        return (
-          <p key={i} className="leading-relaxed whitespace-pre-wrap">
-            {part}
-          </p>
-        );
-      })}
-    </>
-  );
+  return <MarkdownContent content={content} />;
 }
 
 export default function MessageList({ messages, projectName }: MessageListProps) {
@@ -161,7 +132,7 @@ export default function MessageList({ messages, projectName }: MessageListProps)
 
           {/* Bubble */}
           <div className={cn(
-            "max-w-[75%] rounded-2xl px-4 py-3 text-sm",
+            "min-w-0 max-w-[75%] rounded-2xl px-4 py-3 text-sm",
             msg.role === "user"
               ? "rounded-tr-sm bg-violet-600 text-white"
               : "rounded-tl-sm bg-white/5 border border-white/8 text-slate-200"

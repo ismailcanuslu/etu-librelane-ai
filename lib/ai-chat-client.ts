@@ -6,6 +6,8 @@ type ChatRole = "user" | "assistant";
 
 export type ChatHistoryItem = { role: ChatRole; content: string };
 
+export type ChatMode = "agent" | "plan";
+
 export type ChatReplyPayload = { reply: string; thinking?: string };
 
 export type StreamPartialPayload = { thinking?: string; content?: string };
@@ -80,12 +82,13 @@ class AIChatSocketClient {
   sendChatMessage(
     message: string,
     history: ChatHistoryItem[],
-    opts?: { onPartial?: (value: StreamPartialPayload) => void }
+    opts?: { onPartial?: (value: StreamPartialPayload) => void; mode?: ChatMode }
   ): Promise<ChatReplyPayload> {
     const id = newRequestId();
+    const mode = opts?.mode ?? "agent";
     return new Promise<ChatReplyPayload>((resolve, reject) => {
       this.pending.set(id, { resolve, reject, onPartial: opts?.onPartial });
-      void this.sendPayload({ type: "chat", id, message, history }).catch((error) => {
+      void this.sendPayload({ type: "chat", id, message, history, mode }).catch((error) => {
         this.pending.delete(id);
         reject(error instanceof Error ? error : new Error(String(error)));
       });

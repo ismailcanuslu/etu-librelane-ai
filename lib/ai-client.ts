@@ -1,4 +1,11 @@
-import { aiChatSocket, type ChatReplyPayload, type StreamPartialPayload } from "./ai-chat-client";
+import {
+  aiChatSocket,
+  type ChatMode,
+  type ChatReplyPayload,
+  type StreamPartialPayload,
+} from "./ai-chat-client";
+
+export type { ChatMode } from "./ai-chat-client";
 
 export type { StreamPartialPayload as ChatStreamPartialPayload } from "./ai-chat-client";
 
@@ -57,7 +64,7 @@ export function onLateChatReply(
 export async function sendChatMessage(
   message: string,
   history: { role: "user" | "assistant"; content: string }[],
-  opts?: { onPartial?: (value: StreamPartialPayload) => void }
+  opts?: { onPartial?: (value: StreamPartialPayload) => void; mode?: ChatMode }
 ): Promise<ChatReplyPayload> {
   return aiChatSocket.sendChatMessage(message, history, opts);
 }

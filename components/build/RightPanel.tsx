@@ -33,6 +33,10 @@ import { useActiveJob } from "@/lib/active-job-context";
 import { analyzeLog } from "@/lib/ai-client";
 import { FileAPI } from "@/lib/api";
 import { listJobs, getJobLog, listTools } from "@/lib/job-client";
+import { runToolWithPreview } from "@/lib/run-tool-with-preview";
+import PdkInfoBanner from "./PdkInfoBanner";
+import { BuildFlowStrip } from "./BuildFlowStrip";
+import { BUILD_FLOW_ORDER } from "@/lib/build-flow";
 import type { Job, JobStatus, ObjectInfo, ToolSpec } from "@/lib/types";
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -48,8 +52,6 @@ interface ActionCardSpec {
   color: string;
   badge?: string;
 }
-
-const BUILD_FLOW_ORDER = ["synthesis", "verification", "simulation", "openlane1-flow"] as const;
 
 const TOOL_GROUP_LABELS: Record<string, string> = {
   tools: "Test & Doğrulama",
@@ -96,7 +98,7 @@ const TOOL_UI: Record<string, Pick<ActionCardSpec, "icon" | "color" | "infoText"
   "openlane1-flow": {
     icon: <GitBranch className="h-4 w-4" />,
     color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-    infoText: "OpenLane1 flow.tcl ile tam akış; proje adı design olarak kullanılır.",
+    infoText: "openlane/<design>/config.json + flow.tcl; design adı otomatik algılanır.",
   },
   gdsii: {
     icon: <Package className="h-4 w-4" />,
@@ -267,8 +269,7 @@ function ActionRow({
     setError(null);
     setPending(true);
     try {
-      const runOptions = spec.id === "openlane1-flow" ? { designName: projectId } : undefined;
-      await start(projectId, spec.id, runOptions);
+      await runToolWithPreview(projectId, spec.id, start);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -287,10 +288,10 @@ function ActionRow({
         isActiveHere
           ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
           : pending
-          ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
-          : disabled
-          ? "border-white/5 bg-white/3 text-slate-700 cursor-not-allowed"
-          : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-500/40 hover:text-violet-300"
+            ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
+            : disabled
+              ? "border-white/5 bg-white/3 text-slate-700 cursor-not-allowed"
+              : "border-white/10 bg-white/5 text-slate-300 hover:border-violet-500/40 hover:text-violet-300"
       )}
     >
       {isActiveHere ? (
@@ -374,42 +375,25 @@ function ActionRow({
 /* ─────────────────────────── Tabs ─────────────────────────── */
 
 function BuildTab({ projectName, projectId }: { projectName: string; projectId: string }) {
-  const { active } = useActiveJob();
-  const { enabled: enabledTools, buildTools, catalogError, catalogLoading } = useToolsCatalog();
-  const buildCards = useMemo(() => buildTools.map(toActionCard), [buildTools]);
-  const completedIdx = active ? buildCards.findIndex((o) => o.id === active.action) : -1;
+  const { enabled: enabledTools, tools, catalogError, catalogLoading } = useToolsCatalog();
+  const buildCards = useMemo(() => {
+    const byId = new Map(tools.map((t) => [t.id, t]));
+    return BUILD_FLOW_ORDER.map((id) => byId.get(id))
+      .filter((t): t is ToolSpec => Boolean(t))
+      .map(toActionCard);
+  }, [tools]);
 
   return (
     <div className="flex flex-col gap-2 p-4">
+      <PdkInfoBanner />
       <CatalogStatusBanner loading={catalogLoading} error={catalogError} />
       {!projectId && <MissingProjectBanner />}
-      <div className="rounded-lg border border-white/8 bg-white/3 p-3 mb-1">
-        <p className="text-[10px] text-slate-500 mb-2 font-medium uppercase tracking-wider">
-          {projectName} — Akış Sırası
-        </p>
-        <div className="flex items-center gap-1 flex-wrap">
-          {buildCards.map((opt, i) => (
-            <div key={opt.id} className="flex items-center gap-1">
-              <div
-                className={cn(
-                  "flex h-6 items-center gap-1 px-2 rounded-full text-[10px] font-medium border",
-                  active && completedIdx === i && active.finishedAt && active.status === "done"
-                    ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
-                    : active && completedIdx === i && !active.finishedAt
-                    ? "bg-amber-500/20 border-amber-500/30 text-amber-400 animate-pulse"
-                    : "bg-white/5 border-white/10 text-slate-500"
-                )}
-              >
-                <span>{i + 1}</span>
-                <span className="hidden sm:block">{opt.label}</span>
-              </div>
-              {i < buildCards.length - 1 && (
-                <ArrowRight className="h-3 w-3 text-slate-700 flex-shrink-0" />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      <BuildFlowStrip
+        projectId={projectId}
+        projectName={projectName}
+        tools={tools}
+        enabledTools={enabledTools}
+      />
 
       {buildCards.map((opt) => (
         <ActionRow
