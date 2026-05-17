@@ -10,6 +10,8 @@ export async function POST(request: NextRequest) {
     action?: string;
     design_name?: string;
     args?: string[];
+    input_files?: string[];
+    flow_steps?: string[];
   };
   try {
     body = (await request.json()) as {
@@ -17,6 +19,8 @@ export async function POST(request: NextRequest) {
       action?: string;
       design_name?: string;
       args?: string[];
+      input_files?: string[];
+      flow_steps?: string[];
     };
   } catch {
     return Response.json({ error: "geçersiz JSON gövdesi" }, { status: 400 });
@@ -33,10 +37,18 @@ export async function POST(request: NextRequest) {
     action: string;
     design_name?: string;
     args?: string[];
+    input_files?: string[];
+    flow_steps?: string[];
   } = { project_id: projectId, action };
   const designName = body.design_name?.trim();
   if (designName) payload.design_name = designName;
   if (Array.isArray(body.args) && body.args.length > 0) payload.args = body.args;
+  if (Array.isArray(body.input_files) && body.input_files.length > 0) {
+    payload.input_files = body.input_files;
+  }
+  if (Array.isArray(body.flow_steps) && body.flow_steps.length > 0) {
+    payload.flow_steps = body.flow_steps;
+  }
 
   const base = getFileServiceBase();
   const upstream = `${base}/run`;

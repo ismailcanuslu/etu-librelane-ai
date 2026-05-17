@@ -100,7 +100,63 @@ export function toolRunTabKey(action: string, runId: string): string {
   return `__tool_run__:${action}:${runId}`;
 }
 
-export type EditorTabKind = "file" | "ollama-settings" | "tool-run" | "gds-viewer" | "vcd-viewer";
+export function autonomWorkshopTabKey(configKey: string, runId: string): string {
+  return `__atolye__:${encodeURIComponent(configKey)}:${runId}`;
+}
+
+export type EditorTabKind =
+  | "file"
+  | "ollama-settings"
+  | "tool-run"
+  | "autonom-workshop"
+  | "gds-viewer"
+  | "vcd-viewer";
+
+export type AutonomParamKind = "scalar" | "dimension_pair" | "die_area_rect";
+
+export interface AutonomParamSpec {
+  flag: string;
+  kind: AutonomParamKind;
+  start: number | number[] | string;
+  target: number | number[] | string;
+  step: number | number[] | string;
+  serialize_as?: string;
+}
+
+export interface AutonomCampaignSpec {
+  param: AutonomParamSpec;
+  build_actions: string[];
+  openlane_flow_steps?: string[];
+  input_files: string[];
+}
+
+export type AutonomCampaignStatus =
+  | "queued"
+  | "running"
+  | "done"
+  | "failed"
+  | "cancelled";
+
+export interface AutonomCampaignPreview {
+  project_id: string;
+  config_key: string;
+  iteration_count: number;
+  iterations: Array<{ index: number; param_label: string; param_value: unknown }>;
+  input_files: string[];
+  build_actions: string[];
+  openlane_flow_steps?: string[];
+  param: AutonomParamSpec;
+}
+
+export interface AutonomWorkshopTabState {
+  projectId: string;
+  configKey: string;
+  runId: string;
+  step: 1 | 2;
+  spec: AutonomCampaignSpec;
+  campaignId?: string;
+  preview?: AutonomCampaignPreview;
+}
 
 export interface PdkRuntimeInfo {
   pdk_family: string;
@@ -109,6 +165,13 @@ export interface PdkRuntimeInfo {
   container_path: string;
   available: boolean;
   message: string;
+}
+
+export interface FlowStageOption {
+  id: string;
+  label: string;
+  label_en?: string;
+  description?: string;
 }
 
 export interface RunPreview {
@@ -131,6 +194,11 @@ export interface RunPreview {
   output_hints: string[];
   warnings: string[];
   requires_pdk: boolean;
+  /** openlane1-flow: seçilebilir makro aşamalar */
+  flow_stages?: FlowStageOption[];
+  default_flow_steps?: string[];
+  selected_flow_steps?: string[];
+  flow_stage_count?: number;
 }
 
 export interface ToolRunTabState {
@@ -141,6 +209,8 @@ export interface ToolRunTabState {
   jobId?: string;
   /** Kullanıcının onayladığı / düzenlediği workspace dosya listesi */
   selectedInputFiles?: string[];
+  /** openlane1-flow: çalıştırılacak makro aşamalar (sıralı id listesi) */
+  selectedFlowSteps?: string[];
 }
 
 export interface FileTab {
@@ -152,6 +222,7 @@ export interface FileTab {
   content: string;
   dirty: boolean;
   toolRun?: ToolRunTabState;
+  autonomWorkshop?: AutonomWorkshopTabState;
 }
 
 // ─── Job runner ──────────────────────────────────────────────────────────────

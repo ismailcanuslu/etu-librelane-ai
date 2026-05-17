@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Save, Settings2, FileCode2, Trash2 } from "lucide-react";
+import { Plus, Save, Settings2, FileCode2, Trash2, FlaskConical } from "lucide-react";
+import { requestOpenAutonomWorkshopTab } from "@/lib/workspace-events";
+import { buildDefaultAutonomSpec } from "@/lib/autonom-default-spec";
 import { cn } from "@/lib/utils";
 import type { FileTab } from "@/lib/types";
 import { FileAPI } from "@/lib/api";
@@ -203,6 +205,23 @@ export default function OpenlaneConfigEditorPane({ tab, onUpdate }: OpenlaneConf
               >
                 <Settings2 className="h-3 w-3" />
                 Config sihirbazı
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  requestOpenAutonomWorkshopTab({
+                    projectId: tab.bucket,
+                    configKey: tab.key,
+                    runId: `atolye-${Date.now()}`,
+                    spec: buildDefaultAutonomSpec(tab.content, tab.key),
+                    step: 1,
+                  });
+                }}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-amber-300/90 transition-colors hover:bg-amber-500/15 hover:text-amber-200"
+                title="Otonom parametre taraması (Atölye)"
+              >
+                <FlaskConical className="h-3 w-3" />
+                Atölye
               </button>
             </div>
             <span className="truncate font-mono text-[10px] text-slate-600">{tab.key}</span>

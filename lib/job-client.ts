@@ -77,8 +77,22 @@ export async function fetchEdaRuntime(): Promise<EdaRuntimeInfo> {
 
 export async function fetchRunPreview(
   projectId: string,
-  action: string
+  action: string,
+  options?: { flowSteps?: string[] }
 ): Promise<RunPreview> {
+  if (action === "openlane1-flow" && options?.flowSteps?.length) {
+    const res = await fetch(`${TOOLS_BASE}/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        project_id: projectId,
+        action,
+        flow_steps: options.flowSteps,
+      }),
+      cache: "no-store",
+    });
+    return asJsonOrThrow<RunPreview>(res);
+  }
   const params = new URLSearchParams({ project_id: projectId, action });
   const res = await fetch(`${TOOLS_BASE}/preview?${params}`, { cache: "no-store" });
   return asJsonOrThrow<RunPreview>(res);
@@ -87,7 +101,12 @@ export async function fetchRunPreview(
 export async function startJob(
   projectId: string,
   action: string,
-  options?: { designName?: string; args?: string[]; inputFiles?: string[] }
+  options?: {
+    designName?: string;
+    args?: string[];
+    inputFiles?: string[];
+    flowSteps?: string[];
+  }
 ): Promise<{ job_id: string }> {
   const body: {
     project_id: string;
@@ -95,10 +114,12 @@ export async function startJob(
     design_name?: string;
     args?: string[];
     input_files?: string[];
+    flow_steps?: string[];
   } = { project_id: projectId, action };
   if (options?.designName) body.design_name = options.designName;
   if (options?.args?.length) body.args = options.args;
   if (options?.inputFiles?.length) body.input_files = options.inputFiles;
+  if (options?.flowSteps?.length) body.flow_steps = options.flowSteps;
 
   const res = await fetch(`${RUN_BASE}`, {
     method: "POST",

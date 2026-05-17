@@ -6,6 +6,7 @@ import Sidebar from "@/components/sidebar/Sidebar";
 import FileEditorTabs from "@/components/editor/FileEditorTabs";
 import OllamaSettingsEditor from "@/components/settings/OllamaSettingsEditor";
 import ToolRunPreviewEditor from "@/components/build/ToolRunPreviewEditor";
+import AutonomWorkshopPane from "@/components/autonom/AutonomWorkshopPane";
 import AgentPanel from "@/components/workspace/AgentPanel";
 import WorkspaceTerminal from "@/components/workspace/WorkspaceTerminal";
 import ResizeHandle from "@/components/ui/ResizeHandle";
@@ -25,17 +26,26 @@ import {
   getProjects,
   saveActiveProjectId,
 } from "@/lib/store";
-import type { Project, FileTab, FileNode, ToolRunTabState } from "@/lib/types";
+import type {
+  Project,
+  FileTab,
+  FileNode,
+  ToolRunTabState,
+  AutonomWorkshopTabState,
+} from "@/lib/types";
 import {
   isGdsFile,
   isTextFile,
   isVcdFile,
   OLLAMA_SETTINGS_TAB_KEY,
   toolRunTabKey,
+  autonomWorkshopTabKey,
 } from "@/lib/types";
 import {
   OPEN_TOOL_RUN_TAB_EVENT,
+  OPEN_AUTONOM_WORKSHOP_TAB_EVENT,
   type OpenToolRunTabDetail,
+  type OpenAutonomWorkshopTabDetail,
 } from "@/lib/workspace-events";
 
 interface EditorTabBarProps {
@@ -188,6 +198,47 @@ function ChatWorkspaceLayout({
     );
   }, []);
 
+  const handleAutonomWorkshopChange = useCallback(
+    (runId: string, patch: Partial<AutonomWorkshopTabState>) => {
+      setFileTabs((prev) =>
+        prev.map((t) =>
+          t.autonomWorkshop?.runId === runId
+            ? { ...t, autonomWorkshop: { ...t.autonomWorkshop!, ...patch } }
+            : t
+        )
+      );
+    },
+    []
+  );
+
+  const openAutonomWorkshopTab = useCallback((detail: OpenAutonomWorkshopTabDetail) => {
+    const key = autonomWorkshopTabKey(detail.configKey, detail.runId);
+    const tab: FileTab = {
+      kind: "autonom-workshop",
+      key,
+      bucket: detail.projectId,
+      name: `Atölye · ${detail.configKey.split("/").pop() ?? "config"}`,
+      content: "",
+      dirty: false,
+      autonomWorkshop: {
+        projectId: detail.projectId,
+        configKey: detail.configKey,
+        runId: detail.runId,
+        step: detail.step ?? 1,
+        spec: detail.spec,
+        campaignId: detail.campaignId,
+        preview: detail.preview,
+      },
+    };
+    setFileTabs((prev) => {
+      const existing = prev.find((t) => t.key === key);
+      if (existing) return prev.map((t) => (t.key === key ? tab : t));
+      return [...prev, tab];
+    });
+    setActiveFileKey(key);
+    setTerminalCollapsed(false);
+  }, []);
+
   const openToolRunTab = useCallback((detail: OpenToolRunTabDetail) => {
     const key = toolRunTabKey(detail.action, detail.runId);
     const tabLabel = detail.jobId
@@ -212,6 +263,10 @@ function ChatWorkspaceLayout({
             detail.selectedInputFiles ??
             detail.preview.default_input_files ??
             detail.preview.input_files,
+          selectedFlowSteps:
+            detail.selectedFlowSteps ??
+            detail.preview.selected_flow_steps ??
+            detail.preview.default_flow_steps,
         },
       };
       if (existing) {
@@ -232,6 +287,16 @@ function ChatWorkspaceLayout({
     window.addEventListener(OPEN_TOOL_RUN_TAB_EVENT, onToolRun);
     return () => window.removeEventListener(OPEN_TOOL_RUN_TAB_EVENT, onToolRun);
   }, [openToolRunTab]);
+
+  useEffect(() => {
+    const onAtolye = (e: Event) => {
+      const detail = (e as CustomEvent<OpenAutonomWorkshopTabDetail>).detail;
+      if (!detail?.projectId || !detail?.configKey || !detail?.runId || !detail?.spec) return;
+      openAutonomWorkshopTab(detail);
+    };
+    window.addEventListener(OPEN_AUTONOM_WORKSHOP_TAB_EVENT, onAtolye);
+    return () => window.removeEventListener(OPEN_AUTONOM_WORKSHOP_TAB_EVENT, onAtolye);
+  }, [openAutonomWorkshopTab]);
 
   useEffect(() => {
     const hasLive = tabs.some(
@@ -401,10 +466,20 @@ function ChatWorkspaceLayout({
                     handleToolRunChange(activeTab.toolRun!.runId, patch)
                   }
                 />
+              ) : activeTab?.kind === "autonom-workshop" && activeTab.autonomWorkshop ? (
+                <AutonomWorkshopPane
+                  workshop={activeTab.autonomWorkshop}
+                  onChange={(patch) =>
+                    handleAutonomWorkshopChange(activeTab.autonomWorkshop!.runId, patch)
+                  }
+                />
               ) : (
                 <FileEditorTabs
                   tabs={fileTabs.filter(
-                    (t) => t.kind !== "ollama-settings" && t.kind !== "tool-run"
+                    (t) =>
+                      t.kind !== "ollama-settings" &&
+                      t.kind !== "tool-run" &&
+                      t.kind !== "autonom-workshop"
                   )}
                   activeKey={activeFileKey}
                   onTabChange={setActiveFileKey}

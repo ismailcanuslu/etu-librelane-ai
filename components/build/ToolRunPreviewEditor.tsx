@@ -17,9 +17,11 @@ import {
 import { cn } from "@/lib/utils";
 import { FileAPI } from "@/lib/api";
 import { useActiveJob } from "@/lib/active-job-context";
+import { fetchRunPreview } from "@/lib/job-client";
 import { confirmAndStartToolRun } from "@/lib/run-tool-with-preview";
 import type { ToolRunTabState } from "@/lib/types";
 import InputFileTreeView from "@/components/build/InputFileTreeView";
+import OpenlaneFlowStagePicker from "@/components/build/OpenlaneFlowStagePicker";
 import JobArtifactPreview from "./JobArtifactPreview";
 import { keysFromWorkspaceAttachment } from "@/lib/input-file-tree";
 import {
@@ -37,6 +39,10 @@ function defaultSelection(preview: ToolRunTabState["preview"]): string[] {
   return [...(preview.default_input_files ?? preview.input_files)];
 }
 
+function defaultFlowSteps(preview: ToolRunTabState["preview"]): string[] {
+  return [...(preview.default_flow_steps ?? preview.selected_flow_steps ?? [])];
+}
+
 export default function ToolRunPreviewEditor({
   toolRun,
   onOpenFile,
@@ -51,9 +57,17 @@ export default function ToolRunPreviewEditor({
   const [projectFiles, setProjectFiles] = useState<string[]>([]);
   const [addQuery, setAddQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [selectedFlowSteps, setSelectedFlowSteps] = useState<string[]>(
+    () => toolRun.selectedFlowSteps ?? defaultFlowSteps(preview)
+  );
+  const [previewCommand, setPreviewCommand] = useState(preview.command_display);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [fileDragOver, setFileDragOver] = useState(false);
+
+  const flowStages = preview.flow_stages ?? [];
+  const flowDefaultIds = preview.default_flow_steps ?? [];
+  const isOpenlaneFlow = action === "openlane1-flow" && flowStages.length > 0;
 
   const jobTab = useMemo(
     () => (jobId ? tabs.find((t) => t.jobId === jobId) : undefined),
@@ -89,6 +103,29 @@ export default function ToolRunPreviewEditor({
     },
     [onToolRunChange]
   );
+
+  const updateFlowSteps = useCallback(
+    (next: string[]) => {
+      const ordered = flowDefaultIds.filter((id) => next.includes(id));
+      setSelectedFlowSteps(ordered);
+      onToolRunChange?.({ selectedFlowSteps: ordered });
+    },
+    [flowDefaultIds, onToolRunChange]
+  );
+
+  useEffect(() => {
+    if (!isOpenlaneFlow || jobId) return;
+    let cancelled = false;
+    void fetchRunPreview(projectId, action, { flowSteps: selectedFlowSteps }).then(
+      (nextPreview) => {
+        if (cancelled) return;
+        setPreviewCommand(nextPreview.command_display);
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [action, isOpenlaneFlow, jobId, projectId, selectedFlowSteps]);
 
   const toggleFile = (key: string) => {
     updateSelected(
@@ -128,12 +165,15 @@ export default function ToolRunPreviewEditor({
 
   const validationError = useMemo(() => {
     if (selected.length === 0) return "En az bir dosya seçin.";
+    if (isOpenlaneFlow && selectedFlowSteps.length === 0) {
+      return "En az bir OpenLane aşaması seçin.";
+    }
     const hasV = selected.some((k) => k.endsWith(".v"));
     if (preview.warnings.some((w) => w.includes(".v")) && !hasV) {
       return "Bu araç için en az bir .v dosyası seçili olmalı.";
     }
     return null;
-  }, [selected, preview.warnings]);
+  }, [isOpenlaneFlow, selected, selectedFlowSteps.length, preview.warnings]);
 
   async function handleStart() {
     if (validationError || jobId) return;
@@ -141,7 +181,11 @@ export default function ToolRunPreviewEditor({
     setStarting(true);
     try {
       await confirmAndStartToolRun(
-        { ...toolRun, selectedInputFiles: selected },
+        {
+          ...toolRun,
+          selectedInputFiles: selected,
+          selectedFlowSteps: isOpenlaneFlow ? selectedFlowSteps : undefined,
+        },
         selected,
         start
       );
@@ -317,6 +361,16 @@ export default function ToolRunPreviewEditor({
           )}
         </section>
 
+        {isOpenlaneFlow && (
+          <OpenlaneFlowStagePicker
+            stages={flowStages}
+            defaultIds={flowDefaultIds}
+            selected={selectedFlowSteps}
+            onChange={updateFlowSteps}
+            disabled={locked}
+          />
+        )}
+
         <section>
           <h3 className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
             <FolderOpen className="h-3 w-3" />
@@ -356,7 +410,7 @@ export default function ToolRunPreviewEditor({
             Komut
           </h3>
           <pre className="max-h-32 overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-white/10 bg-[#0d1117] p-3 font-mono text-[10px] leading-relaxed text-slate-300">
-            {preview.command_display}
+            {isOpenlaneFlow && !jobId ? previewCommand : preview.command_display}
           </pre>
         </section>
 

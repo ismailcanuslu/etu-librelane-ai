@@ -47,7 +47,12 @@ interface ActiveJobContextValue {
   start: (
     projectId: string,
     action: string,
-    options?: { designName?: string; args?: string[]; inputFiles?: string[] }
+    options?: {
+      designName?: string;
+      args?: string[];
+      inputFiles?: string[];
+      flowSteps?: string[];
+    }
   ) => Promise<{ job_id: string }>;
   attach: (jobId: string, projectId: string, action: string) => Promise<void>;
   cancel: (jobId?: string) => Promise<void>;

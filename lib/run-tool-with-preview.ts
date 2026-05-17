@@ -5,7 +5,12 @@ import { requestOpenToolRunTab } from "@/lib/workspace-events";
 export type RunToolStartFn = (
   projectId: string,
   action: string,
-  options?: { designName?: string; args?: string[]; inputFiles?: string[] }
+  options?: {
+    designName?: string;
+    args?: string[];
+    inputFiles?: string[];
+    flowSteps?: string[];
+  }
 ) => Promise<{ job_id: string }>;
 
 /** Önizleme sekmesini açar; job başlatmaz — kullanıcı sekmede onaylar. */
@@ -17,12 +22,18 @@ export async function openToolRunPreview(
   const runId = opts?.runId ?? `pending-${Date.now()}`;
   const preview = await fetchRunPreview(projectId, action);
   const selectedInputFiles = preview.default_input_files ?? preview.input_files;
+  const selectedFlowSteps =
+    preview.selected_flow_steps ?? preview.default_flow_steps ?? [];
   requestOpenToolRunTab({
     projectId,
     action,
     preview,
     runId,
     selectedInputFiles,
+    selectedFlowSteps:
+      action === "openlane1-flow" && selectedFlowSteps.length > 0
+        ? selectedFlowSteps
+        : undefined,
   });
   return { preview, runId };
 }
@@ -37,9 +48,21 @@ export async function confirmAndStartToolRun(
     designName?: string;
     inputFiles: string[];
     args?: string[];
+    flowSteps?: string[];
   } = { inputFiles: selectedInputFiles };
   if (toolRun.preview.design_name) {
     runOptions.designName = toolRun.preview.design_name;
+  }
+  const flowSteps = toolRun.selectedFlowSteps;
+  const defaultFlow = toolRun.preview.default_flow_steps ?? [];
+  if (
+    toolRun.action === "openlane1-flow" &&
+    flowSteps?.length &&
+    defaultFlow.length > 0 &&
+    (flowSteps.length !== defaultFlow.length ||
+      !defaultFlow.every((id) => flowSteps.includes(id)))
+  ) {
+    runOptions.flowSteps = flowSteps;
   }
   const result = await start(toolRun.projectId, toolRun.action, runOptions);
   requestOpenToolRunTab({
@@ -49,6 +72,7 @@ export async function confirmAndStartToolRun(
     runId: toolRun.runId,
     jobId: result.job_id,
     selectedInputFiles,
+    selectedFlowSteps: toolRun.selectedFlowSteps,
   });
   return result;
 }
