@@ -12,6 +12,7 @@ export type OllamaConfigPayload = {
   container_name: string;
   host_start_command: string;
   ready_timeout_seconds: number;
+  chat_max_tokens: number;
 };
 
 interface OllamaSettingsEditorProps {
@@ -42,6 +43,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
     container_name: "",
     host_start_command: "",
     ready_timeout_seconds: 60,
+    chat_max_tokens: -1,
   });
 
   const markDirty = useCallback((next: OllamaConfigPayload) => {
@@ -64,6 +66,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
       container_name: String(data.container_name ?? ""),
       host_start_command: String(data.host_start_command ?? ""),
       ready_timeout_seconds: Number(data.ready_timeout_seconds ?? 60),
+      chat_max_tokens: Number(data.chat_max_tokens ?? -1),
     };
     return next;
   }, []);
@@ -139,6 +142,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
         container_name: String(data.container_name ?? ""),
         host_start_command: String(data.host_start_command ?? ""),
         ready_timeout_seconds: Number(data.ready_timeout_seconds),
+        chat_max_tokens: Number(data.chat_max_tokens ?? -1),
       };
       setForm(next);
       baselineRef.current = stableStringify(next);
@@ -249,6 +253,21 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
             </datalist>
             <p className="mt-1 text-[10px] text-slate-600">
               {models.length} yerel model; listede yoksa adı elle yazın.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[11px] text-slate-500">Sohbet üretim limiti (token)</label>
+            <input
+              type="number"
+              min={-1}
+              max={262144}
+              value={form.chat_max_tokens}
+              onChange={(e) => patch("chat_max_tokens", Number(e.target.value))}
+              className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200"
+            />
+            <p className="mt-1 text-[10px] text-slate-600">
+              -1 = Ollama bağlam dolana kadar (düşünce + yanıt ortak kota).
             </p>
           </div>
 

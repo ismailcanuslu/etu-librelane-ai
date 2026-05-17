@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Brain, ChevronDown, Cpu, User, Folder, File } from "lucide-react";
+import { Brain, ChevronDown, Cpu, MessageSquare, User, Folder, File } from "lucide-react";
 import MarkdownContent from "./MarkdownContent";
 
 interface MessageListProps {
@@ -57,6 +57,54 @@ export function ThinkingBlock({
           title="Düşünce metni"
         >
           <MarkdownContent content={text} variant="thinking" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function LiveResponseBlock({
+  text,
+  live,
+  defaultOpen = true,
+}: {
+  text: string;
+  live?: boolean;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const preview = text.trim().slice(0, 160).replace(/\s+/g, " ");
+  const needsTruncate = text.trim().length > 160;
+  return (
+    <div className="w-full min-w-0 overflow-hidden rounded-lg border border-sky-500/30 bg-sky-950/35">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[11px] text-sky-100 transition-colors hover:bg-sky-500/15"
+      >
+        <MessageSquare className="h-3.5 w-3.5 flex-shrink-0 text-sky-300" />
+        <span className="min-w-0 flex-1 font-medium">
+          {live ? "Yanıt metni (oluşuyor)" : "Yanıt metni"}
+        </span>
+        <span className="hidden flex-shrink-0 text-[10px] text-sky-300/70 sm:inline">
+          {open ? "Daralt" : "Genişlet"}
+        </span>
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 flex-shrink-0 text-sky-300 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {!open && (
+        <p className="border-t border-sky-500/20 px-3 py-2 text-[11px] leading-relaxed text-slate-300">
+          {preview}
+          {needsTruncate ? "…" : ""}
+        </p>
+      )}
+      {open && (
+        <div
+          className="max-h-[min(70vh,28rem)] overflow-x-hidden overflow-y-auto border-t border-sky-500/25 px-3 py-3 [scrollbar-color:rgba(56,189,248,0.45)_transparent]"
+          title="Yanıt metni"
+        >
+          <MarkdownContent content={text} />
         </div>
       )}
     </div>

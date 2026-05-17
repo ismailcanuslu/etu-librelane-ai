@@ -40,6 +40,7 @@ interface ShellTabState {
   sessionId: string;
   projectId: string;
   label: string;
+  shellCwd: string;
 }
 
 const STATUS_PILL: Record<JobStatus | "preparing", { label: string; klass: string; icon: React.ReactNode }> = {
@@ -200,10 +201,15 @@ export default function WorkspaceTerminal({
       const label =
         hostTerminal.mode === "host"
           ? `host ${hostTerminal.shell ?? "bash"} · ${session.session_id.slice(0, 6)}`
-          : `shell · ${session.session_id.slice(0, 6)}`;
+          : `shell ${session.cwd || "/"} · ${session.session_id.slice(0, 6)}`;
       setShellTabs((prev) => [
         ...prev,
-        { sessionId: session.session_id, projectId: session.project_id, label },
+        {
+          sessionId: session.session_id,
+          projectId: session.project_id,
+          label,
+          shellCwd: session.cwd,
+        },
       ]);
       setActiveSurface({ kind: "shell", sessionId: session.session_id });
     } catch (error) {
@@ -471,6 +477,7 @@ export default function WorkspaceTerminal({
             <InteractiveShellPane
               sessionId={tab.sessionId}
               active={activeShellId === tab.sessionId}
+              shellCwd={tab.shellCwd}
               onClosed={() => removeShellTab(tab.sessionId)}
             />
           </div>

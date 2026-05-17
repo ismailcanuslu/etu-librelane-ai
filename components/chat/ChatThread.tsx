@@ -1,8 +1,7 @@
 "use client";
 
 import { Brain } from "lucide-react";
-import MessageList, { ThinkingBlock } from "./MessageList";
-import MarkdownContent from "./MarkdownContent";
+import MessageList, { LiveResponseBlock, ThinkingBlock } from "./MessageList";
 import ChatInput from "./ChatInput";
 import PlanApprovalBar from "./PlanApprovalBar";
 import FileChangeApprovalPanel from "./FileChangeApprovalPanel";
@@ -86,14 +85,7 @@ export default function ChatThread({
                 <ThinkingBlock text={streamPreview.thinking} live defaultOpen />
               ) : null}
               {streamPreview?.content?.trim() ? (
-                <details className="min-w-0 overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] open:bg-white/[0.06]">
-                  <summary className="cursor-pointer select-none px-3 py-2 text-[11px] font-medium text-slate-300 hover:bg-white/5">
-                    Yanıt metni (oluşuyor)
-                  </summary>
-                  <div className="max-h-[min(40vh,16rem)] overflow-x-hidden overflow-y-auto border-t border-white/8 px-3 py-2.5 [scrollbar-color:rgba(148,163,184,0.4)_transparent]">
-                    <MarkdownContent content={streamPreview.content} />
-                  </div>
-                </details>
+                <LiveResponseBlock text={streamPreview.content} live defaultOpen />
               ) : null}
             </div>
           )}

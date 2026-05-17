@@ -1,7 +1,9 @@
 "use client";
 
+import { useCallback, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MarkdownContentProps {
@@ -9,6 +11,69 @@ interface MarkdownContentProps {
   className?: string;
   /** Düşünce bloğu için daha kompakt tipografi */
   variant?: "default" | "thinking";
+}
+
+function extractText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join("");
+  if (typeof node === "object" && "props" in node) {
+    const props = (node as { props?: { children?: ReactNode } }).props;
+    return extractText(props?.children);
+  }
+  return "";
+}
+
+function CodeBlock({ children, className }: { children: ReactNode; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const code = extractText(children).replace(/\n$/, "");
+
+  const onCopy = useCallback(async () => {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard izni yoksa sessizce gec
+    }
+  }, [code]);
+
+  return (
+    <div className="group relative my-2 max-w-full">
+      <div className="flex items-center justify-between gap-2 rounded-t-lg border border-b-0 border-white/10 bg-[#161b22] px-3 py-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Kod</span>
+        <button
+          type="button"
+          onClick={() => void onCopy()}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-slate-400 transition-colors hover:bg-white/10 hover:text-slate-200"
+          aria-label="Kodu kopyala"
+          title="Kopyala"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span className="text-emerald-400/90">Kopyalandı</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span className="hidden sm:inline">Kopyala</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre
+        className={cn(
+          "max-w-full overflow-x-auto rounded-b-lg border border-white/10 bg-[#0d1117] p-3",
+          "whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
+          className
+        )}
+      >
+        {children}
+      </pre>
+    </div>
+  );
 }
 
 export default function MarkdownContent({
@@ -32,8 +97,6 @@ export default function MarkdownContent({
         "[&_h3]:mb-1.5 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:text-slate-200",
         "[&_strong]:font-semibold [&_strong]:text-slate-100",
         "[&_code]:rounded [&_code]:bg-white/10 [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-[11px]",
-        "[&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-white/10 [&_pre]:bg-[#0d1117] [&_pre]:p-3",
-        "[&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-xs",
         "[&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/40 [&_blockquote]:pl-3 [&_blockquote]:text-slate-300",
         className
       )}
@@ -41,9 +104,7 @@ export default function MarkdownContent({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          pre: ({ children }) => (
-            <pre className="whitespace-pre-wrap">{children}</pre>
-          ),
+          pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
           a: ({ href, children }) => (
             <a
               href={href}

@@ -9,10 +9,16 @@ import { hostShellWebSocketUrl } from "@/lib/terminal-shell-client";
 interface InteractiveShellPaneProps {
   sessionId: string;
   active: boolean;
+  shellCwd?: string;
   onClosed: () => void;
 }
 
-export default function InteractiveShellPane({ sessionId, active, onClosed }: InteractiveShellPaneProps) {
+export default function InteractiveShellPane({
+  sessionId,
+  active,
+  shellCwd,
+  onClosed,
+}: InteractiveShellPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -70,6 +76,9 @@ export default function InteractiveShellPane({ sessionId, active, onClosed }: In
 
     ws.onopen = () => {
       terminal.writeln("Bağlandı.");
+      if (shellCwd === "/") {
+        terminal.writeln("\x1b[90mKök dizin (/). Projeye geçmek için: cd \"$LIBRELANE_PROJECT_DIR\"\x1b[0m");
+      }
       sendResize();
     };
 
@@ -113,7 +122,7 @@ export default function InteractiveShellPane({ sessionId, active, onClosed }: In
       terminalRef.current = null;
       fitRef.current = null;
     };
-  }, [sessionId]);
+  }, [sessionId, shellCwd]);
 
   useEffect(() => {
     if (!active) return;
