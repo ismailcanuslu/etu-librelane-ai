@@ -179,7 +179,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
 
   if (loading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-[#1e1e1e] text-slate-500">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-[#0d1117] text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin" />
         <p className="text-xs">Ollama ayarları yükleniyor…</p>
       </div>
@@ -187,7 +187,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-[#1e1e1e]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-[#0d1117]">
       <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 px-4 py-3">
         <div className="flex items-center gap-2 text-slate-300">
           <Server className="h-4 w-4 text-violet-400" />
@@ -328,7 +328,7 @@ export default function OllamaSettingsEditor({ onDirtyChange }: OllamaSettingsEd
           </div>
         </div>
 
-        <div className="flex min-h-[280px] flex-col rounded-lg border border-white/8 bg-[#252526]">
+        <div className="flex min-h-[280px] flex-col rounded-lg border border-white/8 bg-[#161b22]">
           <p className="border-b border-white/8 px-3 py-2 text-[11px] font-medium text-slate-500">ollama ps (çalışan süreçler)</p>
           <pre className="min-h-0 flex-1 overflow-auto p-3 font-mono text-[10px] leading-relaxed text-slate-400">{psText || "—"}</pre>
         </div>

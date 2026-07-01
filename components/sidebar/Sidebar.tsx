@@ -45,7 +45,7 @@ interface CollapsibleSectionProps {
 function CollapsibleSection({ title, icon, defaultOpen = true, children, action }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-white/8">
+    <div className="border-t border-[#30363d]">
       <div className="group flex w-full items-center justify-between gap-1 px-4 py-2.5 transition-colors hover:bg-white/3">
         <button
           type="button"
@@ -246,11 +246,11 @@ export default function Sidebar({
       )}
 
       <aside
-        className="flex h-full flex-shrink-0 flex-col overflow-hidden border-r border-white/8 bg-[#0d1117]"
+        className="flex h-full flex-shrink-0 flex-col overflow-hidden border-r border-[#30363d] bg-[#0d1117]"
         style={{ width }}
       >
         <div className="flex items-center gap-2.5 px-4 py-4 flex-shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 shadow-lg shadow-violet-500/20">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 shadow-lg shadow-violet-500/20">
             <Cpu className="h-4 w-4 text-white" />
           </div>
           <div>
@@ -407,7 +407,7 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={onOpenOllamaSettings}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:border-violet-500/40 hover:bg-violet-500/10"
+                className="w-full rounded-lg border border-[#30363d] bg-white/5 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:border-violet-500/40 hover:bg-violet-500/10"
               >
                 <span className="font-medium text-violet-300">Ollama ayarları</span>
                 <p className="mt-0.5 text-[10px] text-slate-500">Model, host ve süreçler — yeni sekmede düzenle</p>
@@ -415,7 +415,7 @@ export default function Sidebar({
               <button
                 type="button"
                 onClick={onOpenSystemMetrics}
-                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10"
+                className="w-full rounded-lg border border-[#30363d] bg-white/5 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/10"
               >
                 <span className="font-medium text-emerald-300">Sistem metrikleri</span>
                 <p className="mt-0.5 text-[10px] text-slate-500">

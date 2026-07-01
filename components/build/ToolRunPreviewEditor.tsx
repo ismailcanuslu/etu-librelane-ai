@@ -213,7 +213,7 @@ export default function ToolRunPreviewEditor({
   const locked = Boolean(jobId);
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-[#1e1e1e]">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-[#0d1117]">
       <div className="flex-shrink-0 border-b border-white/8 px-4 py-3">
         <div className="flex items-center gap-2">
           <StatusIcon

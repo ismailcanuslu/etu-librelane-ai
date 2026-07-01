@@ -353,7 +353,7 @@ export default function AutonomWorkshopPane({ workshop, onChange }: AutonomWorks
   }
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-[#1e1e1e]">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-[#0d1117]">
       <div className="flex flex-shrink-0 flex-col gap-2 border-b border-white/8 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <FlaskConical className="h-4 w-4 shrink-0 text-amber-400" />

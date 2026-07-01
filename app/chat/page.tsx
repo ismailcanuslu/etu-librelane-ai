@@ -60,24 +60,24 @@ interface EditorTabBarProps {
 function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }: EditorTabBarProps) {
   if (fileTabs.length === 0) {
     return (
-      <div className="flex h-9 flex-shrink-0 items-center border-b border-white/8 bg-[#1e1e1e] px-3 text-[11px] text-slate-600">
+      <div className="flex h-9 flex-shrink-0 items-center border-b border-[#30363d] bg-[#0d1117] px-3 text-[11px] text-slate-600">
         <span className="text-slate-500">Dosya açmak için sol gezginde bir öğe seçin</span>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-shrink-0 items-end overflow-x-auto border-b border-white/8 bg-[#252526]">
+    <div className="flex flex-shrink-0 items-end overflow-x-auto border-b border-[#30363d] bg-[#161b22]">
       {fileTabs.map((tab) => (
         <button
           key={tab.key}
           type="button"
           onClick={() => onSelectFile(tab.key)}
           className={cn(
-            "group flex max-w-[200px] flex-shrink-0 items-center gap-1.5 border-r border-white/[0.06] px-3 py-2 text-xs transition-colors",
+            "group flex max-w-[200px] flex-shrink-0 items-center gap-1.5 border-r border-[#21262d] px-3 py-2 text-xs transition-colors",
             activeFileKey === tab.key
-              ? "bg-[#1e1e1e] text-slate-100"
-              : "bg-[#2d2d2d] text-slate-400 hover:bg-[#323232] hover:text-slate-200"
+              ? "bg-[#0d1117] text-slate-100"
+              : "bg-[#21262d] text-slate-400 hover:bg-[#30363d] hover:text-slate-200"
           )}
         >
           <span className="truncate">
@@ -119,7 +119,7 @@ function EditorTabBar({ fileTabs, activeFileKey, onSelectFile, onFileTabClose }:
 
 function EmptyEditor() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-[#1e1e1e] px-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-[#0d1117] px-6 text-center">
       <FileCode2 className="h-12 w-12 text-slate-600" />
       <div>
         <p className="text-sm font-medium text-slate-400">Düzenleyici</p>
@@ -445,7 +445,7 @@ function ChatWorkspaceLayout({
   const activeTab = fileTabs.find((t) => t.key === activeFileKey);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#1e1e1e]">
+    <div className="flex h-screen w-screen overflow-hidden bg-[#0d1117]">
       <Sidebar
         activeProjectId={activeProjectId}
         width={layout.sidebarWidth}
@@ -462,7 +462,7 @@ function ChatWorkspaceLayout({
           <button
             type="button"
             onClick={() => setAgentOpen(true)}
-            className="absolute right-0 top-1/2 z-20 flex h-20 w-5 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-white/10 bg-[#252526] text-slate-500 shadow-lg transition-colors hover:bg-[#323232] hover:text-violet-400"
+            className="absolute right-0 top-1/2 z-20 flex h-20 w-5 -translate-y-1/2 items-center justify-center rounded-l border border-r-0 border-[#30363d] bg-[#161b22] text-slate-500 shadow-lg transition-colors hover:bg-[#30363d] hover:text-violet-400"
             title="AI panelini aç"
           >
             <PanelRightOpen className="h-4 w-4" />
@@ -525,7 +525,7 @@ function ChatWorkspaceLayout({
 
           <div
             className={cn(
-              "flex flex-shrink-0 flex-col overflow-hidden border-t border-white/10",
+              "flex flex-shrink-0 flex-col overflow-hidden border-t border-[#30363d]",
               terminalCollapsed && "h-auto"
             )}
             style={terminalCollapsed ? undefined : { height: layout.terminalHeight }}
@@ -546,7 +546,7 @@ function ChatWorkspaceLayout({
 
       <div
         className={cn(
-          "flex flex-shrink-0 flex-col overflow-hidden border-l border-white/10",
+          "flex flex-shrink-0 flex-col overflow-hidden border-l border-[#30363d]",
           !agentOpen && "w-0 min-w-0 border-l-0"
         )}
         style={agentOpen ? { width: layout.agentPanelWidth } : undefined}

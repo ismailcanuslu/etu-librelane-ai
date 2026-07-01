@@ -1,8 +1,76 @@
 @import "tailwindcss";
 
+/*
+ * GitHub Dark (Primer) tema eslemesi.
+ * Tailwind v4 @theme ile mevcut renk skalalari GitHub Primer paletine
+ * yeniden esleniyor; boylece bilesenlerdeki violet/emerald/amber/rose/sky/slate
+ * yardimci siniflari tek merkezden GitHub gorsel diline doner.
+ */
+@theme {
+  /* Aksan (mavi) — eski "violet" skalasi */
+  --color-violet-50: #cae8ff;
+  --color-violet-100: #b6e3ff;
+  --color-violet-200: #79c0ff;
+  --color-violet-300: #58a6ff;
+  --color-violet-400: #388bfd;
+  --color-violet-500: #1f6feb;
+  --color-violet-600: #1158c7;
+  --color-violet-700: #0d419d;
+  --color-violet-800: #0c2d6b;
+  --color-violet-900: #0a2540;
+  --color-violet-950: #051d4d;
+
+  /* Sidebar logo gradienti icin ikincil aksan */
+  --color-indigo-500: #1f6feb;
+  --color-indigo-600: #1158c7;
+
+  /* Basari (yesil) — Primer success */
+  --color-emerald-100: #aff5b4;
+  --color-emerald-200: #7ee787;
+  --color-emerald-300: #56d364;
+  --color-emerald-400: #3fb950;
+  --color-emerald-500: #238636;
+  --color-emerald-600: #1a7f37;
+
+  /* Uyari (sari) — Primer attention */
+  --color-amber-100: #f8e3a1;
+  --color-amber-200: #f0d58c;
+  --color-amber-300: #e3b341;
+  --color-amber-400: #d29922;
+  --color-amber-500: #bb8009;
+  --color-amber-600: #9e6a06;
+
+  /* Tehlike (kirmizi) — Primer danger */
+  --color-rose-100: #ffdcd7;
+  --color-rose-200: #ffaba8;
+  --color-rose-300: #ff7b72;
+  --color-rose-400: #f85149;
+  --color-rose-500: #da3633;
+  --color-rose-600: #b62324;
+
+  /* Ikincil bilgi (acik mavi) — Primer accent tonlari */
+  --color-sky-100: #b6e3ff;
+  --color-sky-200: #79c0ff;
+  --color-sky-300: #58a6ff;
+  --color-sky-400: #388bfd;
+  --color-sky-500: #1f6feb;
+  --color-sky-950: #051d4d;
+
+  /* Notr griler / metin — Primer neutral */
+  --color-slate-100: #f0f6fc;
+  --color-slate-200: #e6edf3;
+  --color-slate-300: #c9d1d9;
+  --color-slate-400: #8b949e;
+  --color-slate-500: #6e7681;
+  --color-slate-600: #484f58;
+  --color-slate-700: #30363d;
+  --color-slate-800: #21262d;
+  --color-slate-900: #161b22;
+}
+
 :root {
   --background: #0d1117;
-  --foreground: #e2e8f0;
+  --foreground: #e6edf3;
 }
 
 * {
@@ -24,7 +92,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+::selection {
+  background: rgba(56, 139, 253, 0.4);
+  color: #f0f6fc;
+}
+
+/* Custom scrollbar — Primer tonlari */
 ::-webkit-scrollbar {
   width: 4px;
   height: 4px;
@@ -35,10 +108,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.15);
+  background: #30363d;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.3);
+  background: #484f58;
 }

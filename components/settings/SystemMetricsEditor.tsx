@@ -104,7 +104,7 @@ export default function SystemMetricsEditor() {
 
   if (loading && !data) {
     return (
-      <div className="flex flex-1 items-center justify-center gap-2 bg-[#1e1e1e] text-slate-400">
+      <div className="flex flex-1 items-center justify-center gap-2 bg-[#0d1117] text-slate-400">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span className="text-sm">Sistem metrikleri okunuyor…</span>
       </div>
@@ -112,7 +112,7 @@ export default function SystemMetricsEditor() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#1e1e1e]">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#0d1117]">
       <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 px-4 py-3">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-emerald-400" />
