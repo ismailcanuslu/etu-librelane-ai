@@ -26,6 +26,7 @@ interface ChatThreadProps {
   chatMode: ChatMode;
   onChatModeChange: (mode: ChatMode) => void;
   onSend: (content: string, attachments: ChatAttachmentRef[]) => void;
+  onDeleteMessage?: (id: string) => void;
   pendingPlan?: PendingPlan | null;
   onPlanApprove?: () => void;
   onPlanEdit?: () => void;
@@ -48,6 +49,7 @@ export default function ChatThread({
   chatMode,
   onChatModeChange,
   onSend,
+  onDeleteMessage,
   pendingPlan,
   onPlanApprove,
   onPlanEdit,
@@ -75,7 +77,7 @@ export default function ChatThread({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <MessageList messages={messages} projectName={projectName} />
+      <MessageList messages={messages} projectName={projectName} onDeleteMessage={onDeleteMessage} />
 
       {isLoading && (
         <div ref={loadSectionRef} className="flex min-w-0 flex-col border-t border-white/6 bg-[#0d1117]/95">

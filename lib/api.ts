@@ -28,12 +28,12 @@ export const FileAPI = {
     return data.projects ?? [];
   },
 
-  async createProject(name: string): Promise<void> {
+  async createProject(name: string, template: "caravel" | "verilog" = "caravel"): Promise<void> {
     await throwIfError(
       await fetch(FILES_BASE, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, template }),
       })
     );
   },

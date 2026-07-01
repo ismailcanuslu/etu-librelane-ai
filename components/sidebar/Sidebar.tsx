@@ -12,6 +12,10 @@ import {
   Files,
   AlertTriangle,
   Loader2,
+  Layers,
+  FileCode,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -114,6 +118,164 @@ function DeleteDialog({ project, onConfirm, onCancel, deleting }: DeleteDialogPr
   );
 }
 
+type ProjectTemplate = "caravel" | "verilog";
+
+interface NewProjectDialogProps {
+  onCreate: (name: string, template: ProjectTemplate) => void;
+  onCancel: () => void;
+  creating: boolean;
+  error: string | null;
+}
+
+const TEMPLATE_OPTIONS: {
+  id: ProjectTemplate;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    id: "caravel",
+    title: "Caravel Wishbone arayüzü",
+    description: "Efabless Caravel user_project_wrapper + OpenLane iskeleti (tape-out yolu).",
+    icon: <Layers className="h-5 w-5" />,
+  },
+  {
+    id: "verilog",
+    title: "Sadece Verilog",
+    description: "Sade RTL + testbench + Makefile. OpenLane/Caravel dosyası yok.",
+    icon: <FileCode className="h-5 w-5" />,
+  },
+];
+
+function NewProjectDialog({ onCreate, onCancel, creating, error }: NewProjectDialogProps) {
+  const [name, setName] = useState("");
+  const [template, setTemplate] = useState<ProjectTemplate>("caravel");
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
+
+  const trimmed = name.trim();
+
+  function submit() {
+    if (!trimmed || creating) return;
+    onCreate(trimmed, template);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onCancel}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onCancel();
+      }}
+    >
+      <div
+        className="w-[min(460px,92vw)] rounded-2xl border border-violet-500/30 bg-[#0d1117]/95 p-6 shadow-2xl backdrop-blur-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-violet-300">
+            <Plus className="h-4 w-4 flex-shrink-0" />
+            <span className="text-sm font-semibold">Yeni Proje</span>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/8 hover:text-slate-300"
+            title="Kapat"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-slate-500">
+          Proje adı
+        </label>
+        <input
+          ref={nameRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+          }}
+          placeholder="Örn. Simple16 CPU"
+          className="w-full rounded-lg border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-violet-400"
+        />
+        {trimmed && (
+          <p className="mt-1 text-[10px] text-slate-600">
+            bucket: <span className="text-slate-500">{toBucketName(name)}</span>
+          </p>
+        )}
+
+        <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-wider text-slate-500">
+          Başlangıç şablonu
+        </p>
+        <div className="space-y-2">
+          {TEMPLATE_OPTIONS.map((opt) => {
+            const selected = template === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setTemplate(opt.id)}
+                className={cn(
+                  "flex w-full items-start gap-3 rounded-xl border px-3 py-3 text-left transition-all",
+                  selected
+                    ? "border-violet-500/60 bg-violet-500/10"
+                    : "border-white/8 bg-white/3 hover:border-violet-500/30 hover:bg-white/5"
+                )}
+              >
+                <span
+                  className={cn(
+                    "mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg",
+                    selected ? "bg-violet-600 text-white" : "bg-white/5 text-slate-400"
+                  )}
+                >
+                  {opt.icon}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className={cn("text-sm font-medium", selected ? "text-violet-200" : "text-slate-200")}>
+                      {opt.title}
+                    </span>
+                    {selected && <Check className="h-3.5 w-3.5 flex-shrink-0 text-violet-400" />}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-slate-500">
+                    {opt.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {error && <p className="mt-3 text-[11px] text-rose-400">{error}</p>}
+
+        <div className="mt-5 flex gap-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!trimmed || creating}
+            className="flex-1 rounded-lg bg-violet-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+          >
+            {creating ? "Oluşturuluyor..." : "Oluştur"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={creating}
+            className="flex-1 rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-white/10 disabled:opacity-50"
+          >
+            İptal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function bucketToDisplayName(bucket: string): string {
   return bucket
     .split("-")
@@ -131,13 +293,11 @@ export default function Sidebar({
 }: SidebarProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [newProjectName, setNewProjectName] = useState("");
   const [showNewProject, setShowNewProject] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProjectsFromWorkspace();
@@ -179,20 +339,15 @@ export default function Sidebar({
     }
   }
 
-  useEffect(() => {
-    if (showNewProject) inputRef.current?.focus();
-  }, [showNewProject]);
-
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
-  async function handleCreateProject() {
-    const name = newProjectName.trim();
+  async function handleCreateProject(name: string, template: ProjectTemplate) {
     if (!name || creating) return;
     const bucket = toBucketName(name);
     setCreating(true);
     setCreateError(null);
     try {
-      await FileAPI.createProject(bucket);
+      await FileAPI.createProject(bucket, template);
       const newProject: Project = {
         id: `proj-${Date.now()}`,
         name,
@@ -204,7 +359,6 @@ export default function Sidebar({
       saveProjects(updated);
       onProjectChange(newProject.id);
       saveActiveProjectId(newProject.id);
-      setNewProjectName("");
       setShowNewProject(false);
       loadProjectsFromWorkspace();
     } catch (err) {
@@ -242,6 +396,19 @@ export default function Sidebar({
           onConfirm={handleConfirmDelete}
           onCancel={() => setDeleteTarget(null)}
           deleting={deleting}
+        />
+      )}
+
+      {showNewProject && (
+        <NewProjectDialog
+          onCreate={(name, template) => void handleCreateProject(name, template)}
+          onCancel={() => {
+            if (creating) return;
+            setShowNewProject(false);
+            setCreateError(null);
+          }}
+          creating={creating}
+          error={createError}
         />
       )}
 
@@ -287,10 +454,11 @@ export default function Sidebar({
                 <button
                   type="button"
                   onClick={() => {
-                    setShowNewProject((v) => !v);
+                    setShowNewProject(true);
                     setCreateError(null);
                   }}
                   className="flex h-5 w-5 items-center justify-center rounded text-slate-500 hover:bg-white/8 hover:text-violet-400 transition-colors"
+                  title="Yeni proje"
                 >
                   <Plus className="h-3.5 w-3.5" />
                 </button>
@@ -298,50 +466,6 @@ export default function Sidebar({
             }
           >
             <div className="px-2 space-y-0.5">
-              {showNewProject && (
-                <div className="mb-2">
-                  <input
-                    ref={inputRef}
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleCreateProject();
-                      if (e.key === "Escape") {
-                        setShowNewProject(false);
-                        setNewProjectName("");
-                      }
-                    }}
-                    placeholder="Proje adı..."
-                    className="w-full rounded-lg border border-violet-500/50 bg-violet-500/10 px-3 py-1.5 text-xs text-white placeholder-slate-500 outline-none focus:border-violet-400"
-                  />
-                  {newProjectName.trim() && (
-                    <p className="mt-0.5 text-[10px] text-slate-600">
-                      bucket: <span className="text-slate-500">{toBucketName(newProjectName)}</span>
-                    </p>
-                  )}
-                  {createError && <p className="mt-1 text-[10px] text-rose-400">{createError}</p>}
-                  <div className="mt-1 flex gap-1">
-                    <button
-                      onClick={handleCreateProject}
-                      disabled={creating}
-                      className="flex-1 rounded-md bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-500 disabled:opacity-50"
-                    >
-                      {creating ? "Oluşturuluyor..." : "Oluştur"}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowNewProject(false);
-                        setNewProjectName("");
-                        setCreateError(null);
-                      }}
-                      className="flex-1 rounded-md bg-white/5 px-2 py-1 text-xs text-slate-400 hover:bg-white/10"
-                    >
-                      İptal
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {loadingProjects && projects.length === 0 && (
                 <div className="flex items-center gap-1.5 px-2 py-3 text-[11px] text-slate-600">
                   <Loader2 className="h-3 w-3 animate-spin" />

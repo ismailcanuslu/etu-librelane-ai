@@ -10,6 +10,7 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import ChatThread from "@/components/chat/ChatThread";
 import { AgentWorkflowBody, type AgentWorkflowTab } from "@/components/build/RightPanel";
@@ -429,6 +430,25 @@ export default function AgentPanel({
     });
   }
 
+  function handleDeleteMessage(messageId: string) {
+    setMessages((prev) => {
+      const next = prev.filter((m) => m.id !== messageId);
+      void putChatHistory(projectId, next).catch(() => { });
+      return next;
+    });
+    setPendingPlan((prev) => (prev && prev.messageId === messageId ? null : prev));
+    setPendingFileChanges((prev) => (prev && prev.messageId === messageId ? null : prev));
+  }
+
+  function handleClearChat() {
+    if (messages.length === 0) return;
+    setPendingPlan(null);
+    setPendingFileChanges(null);
+    setStreamPreview(null);
+    setMessages([]);
+    void putChatHistory(projectId, []).catch(() => { });
+  }
+
   async function handlePlanApprove() {
     if (!pendingPlan || planActionBusy) return;
     setPlanActionBusy(true);
@@ -463,14 +483,27 @@ export default function AgentPanel({
           </p>
           <p className="truncate text-xs font-medium text-slate-200">{projectName || "Proje"}</p>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/8 hover:text-slate-300"
-          title="Paneli gizle"
-        >
-          <PanelRightClose className="h-4 w-4" />
-        </button>
+        <div className="flex flex-shrink-0 items-center gap-1">
+          {tab === "chat" && messages.length > 0 && (
+            <button
+              type="button"
+              onClick={handleClearChat}
+              disabled={isLoading}
+              className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-40"
+              title="Sohbeti temizle"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-7 w-7 items-center justify-center rounded text-slate-500 transition-colors hover:bg-white/8 hover:text-slate-300"
+            title="Paneli gizle"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-shrink-0 overflow-x-auto border-b border-[#30363d]">
@@ -507,6 +540,7 @@ export default function AgentPanel({
               onAddAttachment={addAttachment}
               onRemoveAttachment={removeAttachment}
               onSend={(content, sentAttachments) => void handleSend(content, sentAttachments)}
+              onDeleteMessage={handleDeleteMessage}
               pendingPlan={pendingPlan}
               onPlanApprove={() => void handlePlanApprove()}
               onPlanEdit={handlePlanEdit}

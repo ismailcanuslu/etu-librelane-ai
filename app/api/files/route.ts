@@ -47,16 +47,19 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   let name: string | undefined;
+  let template: string | undefined;
   try {
     const ct = request.headers.get("content-type") ?? "";
     if (ct.includes("application/json")) {
-      const body = (await request.json()) as { name?: string };
+      const body = (await request.json()) as { name?: string; template?: string };
       name = body.name?.trim();
+      template = body.template?.trim();
     } else {
       const text = (await request.text()).trim();
       try {
-        const parsed = JSON.parse(text) as { name?: string };
+        const parsed = JSON.parse(text) as { name?: string; template?: string };
         name = parsed.name?.trim();
+        template = parsed.template?.trim();
       } catch {
         name = text || undefined;
       }
@@ -69,7 +72,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: "name is required" }, { status: 400 });
   }
 
-  const upstream = upstreamProjectPath(name);
+  const normalizedTemplate = template === "verilog" ? "verilog" : "caravel";
+  const upstream = `${upstreamProjectPath(name)}?template=${normalizedTemplate}`;
   try {
     const res = await fetch(upstream, { method: "POST" });
     const data = await safeJson(res);

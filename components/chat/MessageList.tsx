@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Message } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Brain, ChevronDown, Cpu, MessageSquare, User } from "lucide-react";
+import { Brain, ChevronDown, Cpu, MessageSquare, Trash2, User } from "lucide-react";
 import MarkdownContent from "./MarkdownContent";
 import ChatAttachmentChip from "./ChatAttachmentChip";
 import CopyTextButton from "./CopyTextButton";
@@ -12,6 +12,7 @@ import { chatAttachmentId } from "@/lib/chat-attachments";
 interface MessageListProps {
   messages: Message[];
   projectName: string;
+  onDeleteMessage?: (id: string) => void;
 }
 
 function formatTime(ts: string) {
@@ -127,7 +128,7 @@ function MessageContent({ content }: { content: string }) {
   return <MarkdownContent content={content} />;
 }
 
-export default function MessageList({ messages, projectName }: MessageListProps) {
+export default function MessageList({ messages, projectName, onDeleteMessage }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function MessageList({ messages, projectName }: MessageListProps)
         <div
           key={msg.id}
           className={cn(
-            "flex gap-3",
+            "group flex gap-3",
             msg.role === "user" ? "flex-row-reverse" : "flex-row"
           )}
         >
@@ -220,12 +221,27 @@ export default function MessageList({ messages, projectName }: MessageListProps)
                 ))}
               </div>
             )}
-            <p className={cn(
-              "mt-1.5 text-[10px]",
-              msg.role === "user" ? "text-violet-200/60 text-right" : "text-slate-600"
+            <div className={cn(
+              "mt-1.5 flex items-center gap-2 text-[10px]",
+              msg.role === "user" ? "flex-row-reverse text-violet-200/60" : "text-slate-600"
             )}>
-              {formatTime(msg.timestamp)}
-            </p>
+              <span>{formatTime(msg.timestamp)}</span>
+              {onDeleteMessage && (
+                <button
+                  type="button"
+                  onClick={() => onDeleteMessage(msg.id)}
+                  className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded opacity-0 transition-all group-hover:opacity-100",
+                    msg.role === "user"
+                      ? "text-violet-200/70 hover:bg-white/15 hover:text-white"
+                      : "text-slate-500 hover:bg-white/10 hover:text-rose-400"
+                  )}
+                  title="Bu mesajı sil"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       ))}
